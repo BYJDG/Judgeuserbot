@@ -1,55 +1,56 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-echo "📦 JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
+echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
 
-# Gerekli paketleri yükle
-pkg update -y && pkg upgrade -y
-pkg install python -y
-pkg install git -y
-pkg install ffmpeg -y
-pkg install libffi -y
+# Gerekli paketlerin kurulumu
+pkg update -y
+pkg upgrade -y
+pkg install -y python git ffmpeg libffi
 
-# Pip engelini kaldır
-termux-change-repo
-yes | pip install --upgrade pip setuptools wheel
+# Python paketleri
+pip install --upgrade pip
+pip install telethon
 
-# Reponun zaten var olup olmadığını kontrol et
+# Repo klonlama (varsa eskiyi yedekle)
 if [ -d "Judgeuserbot" ]; then
-  echo "❗ Judgeuserbot klasörü zaten var. Devam ediliyor..."
-else
-  echo "📥 Reposu klonlanıyor..."
-  git clone https://github.com/BYJDG/Judgeuserbot.git
+    echo "Eski Judgeuserbot klasörü bulunuyor, yedekleniyor..."
+    mv Judgeuserbot Judgeuserbot_backup_$(date +%s)
 fi
 
-cd Judgeuserbot
+git clone https://github.com/BYJDG/Judgeuserbot.git
+cd Judgeuserbot || exit
 
-# Session dosyası kontrolü
-if [ -f "session.session" ]; then
-    echo "🟡 Kayıtlı bir oturum bulundu."
-    read -p "Bu oturumu kullanmak ister misiniz? (Y/n): " use_session
-    if [[ "$use_session" =~ ^[Yy]$ ]]; then
-        echo "🔁 Mevcut oturumla devam ediliyor."
+# Session kontrolü
+if ls *.session 1> /dev/null 2>&1; then
+    echo "Zaten kayıtlı bir oturumunuz var. Yeniden giriş yapmak ister misiniz? (Y/n)"
+    read -r answer
+    if [[ $answer == "Y" || $answer == "y" ]]; then
+        echo "Eski oturum dosyaları siliniyor..."
+        rm *.session
+        rm *.session-journal 2>/dev/null
     else
-        rm session.session*
-        echo "🔄 Yeni giriş yapılacak."
+        echo "Var olan oturum kullanılacak."
     fi
 fi
 
-# API bilgilerini al
-read -p "🆔 API ID: " api_id
-read -p "🔑 API Hash: " api_hash
+# API bilgileri ve owner username girişi
+echo "Telegram API ID'nizi girin:"
+read -r api_id
 
-# config.json oluştur
-cat > config.json <<EOF
+echo "Telegram API HASH'inizi girin:"
+read -r api_hash
+
+echo "Bot sahibi Telegram kullanıcı adınızı (örn: byjudgee) girin:"
+read -r owner_username
+
+# config.json dosyasını oluştur
+cat > config.json << EOL
 {
   "api_id": $api_id,
-  "api_hash": "$api_hash"
+  "api_hash": "$api_hash",
+  "owner_username": "$owner_username"
 }
-EOF
+EOL
 
-# Gerekli Python paketleri
-pip install -r requirements.txt
-
-# Botu başlat
-echo "🚀 Kurulum tamamlandı. Bot başlatılıyor..."
-python userbot.py
+echo "Kurulum tamamlandı. Bot başlatılıyor..."
+python3 userbot.py
