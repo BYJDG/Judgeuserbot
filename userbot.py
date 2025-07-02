@@ -1,122 +1,113 @@
-import json
 import os
+import json
+import asyncio
 from telethon import TelegramClient, events
-from telethon.errors.rpcerrorlist import PhoneNumberBannedError
+from telethon.errors import SessionPasswordNeededError
+from telethon.tl.types import PeerUser
 
-# Config dosyası varsa yükle
+# Konfigürasyon dosyasını kontrol et
 CONFIG_FILE = "config.json"
-if os.path.exists(CONFIG_FILE):
+
+if not os.path.exists(CONFIG_FILE):
+    print("⚠️ config.json bulunamadı!")
+    api_id = input("API ID: ")
+    api_hash = input("API HASH: ")
+    owner_id = input("Bot sahibi Telegram kullanıcı ID: ")
+
+    config = {
+        "api_id": int(api_id),
+        "api_hash": api_hash,
+        "owner_id": int(owner_id)
+    }
+
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f)
+else:
     with open(CONFIG_FILE, "r") as f:
         config = json.load(f)
-else:
-    config = {}
 
-api_id = config.get("api_id")
-api_hash = config.get("api_hash")
-phone = config.get("phone")
-owner_username = config.get("owner_username")  # Admin için kullanıcı adı örn: "byjudgee"
+api_id = config["api_id"]
+api_hash = config["api_hash"]
+owner_id = config["owner_id"]
 
-if not api_id or not api_hash or not phone or not owner_username:
-    print("Lütfen önce config.json dosyasını doldurun veya kurulum scriptini kullanın.")
-    exit(1)
+session_name = "session"
 
-client = TelegramClient("session", api_id, api_hash)
-
-afk = False
-afk_reason = ""
-filter_map = {}
-answered_users = set()  # AFK modunda bir kişiye sadece 1 cevap için
-
-@client.on(events.NewMessage(pattern=r"\.alive"))
-async def alive(event):
-    if event.sender_id == (await client.get_me()).id:
-        await event.reply("Bot aktif ve çalışıyor! 🟢")
-
-@client.on(events.NewMessage(pattern=r"\.wlive"))
-async def wlive(event):
-    sender = await event.get_sender()
-    username = sender.username if sender else ""
-    if username.lower() != owner_username.lower():
-        await event.reply("❌ Bu komutu kullanmak için yetkiniz yok.")
-        return
-    await event.reply("Userbotunuz çalışıyor ve sana bişey demek istiyor..\nSeni seviyorum ByJudge ❤️\nBot Versiyonu: v1")
-
-@client.on(events.NewMessage(pattern=r"\.afk(?:\s+(.*))?"))
-async def afk_cmd(event):
-    global afk, afk_reason, answered_users
-    if event.sender_id != (await client.get_me()).id:
-        return
-    afk = True
-    afk_reason = event.pattern_match.group(1) or "AFK"
-    answered_users = set()
-    await event.reply(f"AFK modu aktif: {afk_reason}")
-
-@client.on(events.NewMessage(pattern=r"\.back"))
-async def back_cmd(event):
-    global afk, afk_reason, answered_users
-    if event.sender_id != (await client.get_me()).id:
-        return
-    afk = False
-    afk_reason = ""
-    answered_users = set()
-    await event.reply("AFK modu kapatıldı.")
-
-@client.on(events.NewMessage(pattern=r"\.filter\s+(\S+)\s+(.+)"))
-async def filter_add(event):
-    global filter_map
-    if event.sender_id != (await client.get_me()).id:
-        return
-    key = event.pattern_match.group(1)
-    val = event.pattern_match.group(2)
-    filter_map[key] = val
-    await event.reply(f"Filter eklendi: '{key}' → '{val}'")
-
-@client.on(events.NewMessage(pattern=r"\.unfilter\s+(\S+)"))
-async def filter_remove(event):
-    global filter_map
-    if event.sender_id != (await client.get_me()).id:
-        return
-    key = event.pattern_match.group(1)
-    if key in filter_map:
-        filter_map.pop(key)
-        await event.reply(f"Filter kaldırıldı: '{key}'")
+# Session dosyası kontrolü
+if os.path.exists(f"{session_name}.session"):
+    print("⚠️ Zaten kayıtlı bir hesabınız var.")
+    retry = input("🔁 Yeniden giriş yapmak ister misiniz? (Y/N): ").strip().lower()
+    if retry == "y":
+        os.remove(f"{session_name}.session")
+        print("🗑️ Oturum silindi. Giriş başlatılıyor...")
     else:
-        await event.reply(f"Filter bulunamadı: '{key}'")
+        print("✅ Kayıtlı oturum üzerinden devam ediliyor...")
 
-@client.on(events.NewMessage)
-async def auto_reply(event):
-    global afk, afk_reason, answered_users, filter_map
-    sender_id = event.sender_id
-    me_id = (await client.get_me()).id
+# TelegramClient oluştur
+client = TelegramClient(session_name, api_id, api_hash)
 
-    if sender_id == me_id:
-        return  # Kendi mesajına cevap verme
+# AFK sistemleri
+is_afk = False
+afk_reason = ""
+afk_replied_users = set()
 
-    # AFK modu yanıtı
-    if afk:
-        if sender_id not in answered_users:
-            answered_users.add(sender_id)
+# BOT BAŞLANGICI
+@client.on(events.NewMessage(outgoing=True, pattern=r"\.alive"))
+async def alive_handler(event):
+    if event.sender_id == (await client.get_me()).id:
+        await event.reply("✅ **JudgeUserBot Çalışıyor!**\n💡 Sürüm: v1.0")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r"\.afk (.+)"))
+async def afk_set(event):
+    global is_afk, afk_reason, afk_replied_users
+    afk_reason = event.pattern_match.group(1)
+    is_afk = True
+    afk_replied_users = set()
+    await event.reply("🤖 AFK moduna geçildi.")
+
+@client.on(events.NewMessage(outgoing=True, pattern=r"\.back"))
+async def afk_unset(event):
+    global is_afk, afk_reason, afk_replied_users
+    is_afk = False
+    afk_reason = ""
+    afk_replied_users = set()
+    await event.reply("✅ AFK modu kapatıldı.")
+
+@client.on(events.NewMessage(incoming=True))
+async def afk_auto_reply(event):
+    global is_afk, afk_reason, afk_replied_users
+    if is_afk and event.sender_id not in afk_replied_users:
+        afk_replied_users.add(event.sender_id)
+        try:
             await event.reply(afk_reason)
-        return
+        except Exception:
+            pass  # Özellikle grup gibi yerlerde yetki hatası olabilir
 
-    # Filtreli cevap
-    text = event.raw_text.lower()
-    for key in filter_map:
-        if key.lower() in text:
-            await event.reply(filter_map[key])
-            break
+@client.on(events.NewMessage(outgoing=True, pattern=r"\.wlive"))
+async def wlive(event):
+    if event.sender_id == owner_id:
+        await event.reply("✅ Userbotunuz çalışıyor ve sana bir şey demek istiyor...\n❤️ Seni seviyorum ByJudge!\n\n📌 Versiyon: v1")
+    else:
+        await event.reply("⛔ Bu komutu kullanmak için yetkiniz yok.")
 
+@client.on(events.NewMessage(outgoing=True, pattern=r"\.id"))
+async def id_handler(event):
+    if event.is_reply:
+        reply = await event.get_reply_message()
+        user_id = reply.sender_id
+        await event.reply(f"🆔 Kullanıcının ID'si: `{user_id}`")
+    else:
+        await event.reply("ℹ️ Bu komutu kullanmak için bir mesaja yanıt verin.")
+
+# BOTU BAŞLAT
 async def main():
-    print("Bot başlatılıyor...")
-    await client.start(phone)
-    print("Bot aktif!")
+    print("🚀 Bot başlatılıyor...")
+    await client.start()
+    print("✅ Bot aktif!")
+
+    me = await client.get_me()
+    print(f"Bot giriş yaptı: {me.first_name} (@{me.username})")
+
     await client.run_until_disconnected()
 
-if __name__ == "__main__":
-    import asyncio
-    try:
-        asyncio.run(main())
-    except PhoneNumberBannedError:
-        print("Telefon numaranız Telegram tarafından engellenmiş olabilir.")
-    except Exception as e:
-        print(f"Hata: {e}")
+# ASENKRON ÇALIŞTIR
+asyncio.run(main())
