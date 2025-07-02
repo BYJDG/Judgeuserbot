@@ -1,64 +1,62 @@
 #!/bin/bash
 
+clear
 echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
+echo "==========================================="
 
-pkg update -y && pkg upgrade -y
-pkg install python git ffmpeg libffi -y
+# Paket güncellemeleri
+pkg update -y
+pkg upgrade -y
+pkg install -y python git ffmpeg libffi
 
-if [ -d "Judgeuserbot" ]; then
-    echo "Judgeuserbot dizini zaten mevcut, güncelleniyor..."
-    cd Judgeuserbot
-    git pull
-else
+# Repo kontrolü ve güncelleme
+if [ ! -d "Judgeuserbot" ]; then
     git clone https://github.com/BYJDG/Judgeuserbot.git
     cd Judgeuserbot
+else
+    cd Judgeuserbot
+    git pull origin main
 fi
 
+# Config dosyası kontrolü
+if [ ! -f "config.py" ]; then
+    cp config.py.example config.py
+fi
+
+# API bilgilerini al
+get_api_credentials() {
+    echo -e "\n\033[1;36mTelegram API Bilgilerinizi Alın:\033[0m"
+    echo "1. https://my.telegram.org adresine gidin"
+    echo "2. 'API Development Tools' bölümüne girin"
+    echo "3. 'App title' ve 'Short name' doldurup uygulama oluşturun"
+    echo ""
+}
+
+# API ID ve HASH kontrolü
+if grep -q 'API_ID = 1234567' config.py || grep -q 'API_HASH = "abcdefg"' config.py; then
+    get_api_credentials
+    read -p "API_ID: " api_id
+    read -p "API_HASH: " api_hash
+    sed -i "s/API_ID = 1234567/API_ID = $api_id/" config.py
+    sed -i "s/API_HASH = \"abcdefg\"/API_HASH = \"$api_hash\"/" config.py
+fi
+
+# Gerekli Python paketleri
 pip install -r requirements.txt
 
-if [ -f "config.json" ]; then
-    echo "config.json zaten mevcut."
-    read -p "Yeni API bilgileri ile tekrar giriş yapmak ister misiniz? (Y/n): " answer
-    if [[ "$answer" == "Y" || "$answer" == "y" ]]; then
-        echo "Yeni API bilgilerinizi giriniz."
-        while true; do
-            read -p "API ID (sadece rakam): " api_id
-            if [[ "$api_id" =~ ^[0-9]+$ ]]; then
-                break
-            else
-                echo "Lütfen sadece rakam giriniz!"
-            fi
-        done
-        read -p "API HASH: " api_hash
-
-        cat > config.json <<EOF
-{
-  "api_id": $api_id,
-  "api_hash": "$api_hash"
-}
-EOF
+# Session yönetimi
+session_name=$(grep "session_name =" userbot.py | awk -F"'" '{print $2}')
+if [ -f "$session_name.session" ]; then
+    echo -e "\n\033[1;33mMevcut oturum dosyası bulundu:\033[0m $session_name.session"
+    read -p "Yeni hesap ile giriş yapmak istiyor musunuz? (E/H): " choice
+    if [ "$choice" = "E" ] || [ "$choice" = "e" ]; then
+        rm "$session_name.session"
+        echo "Yeni oturum oluşturulacak..."
     else
-        echo "Mevcut config.json ile devam ediliyor."
+        echo "Mevcut oturumla devam ediliyor..."
     fi
-else
-    echo "Lütfen Telegram API bilgilerinizi giriniz."
-    while true; do
-        read -p "API ID (sadece rakam): " api_id
-        if [[ "$api_id" =~ ^[0-9]+$ ]]; then
-            break
-        else
-            echo "Lütfen sadece rakam giriniz!"
-        fi
-    done
-    read -p "API HASH: " api_hash
-
-    cat > config.json <<EOF
-{
-  "api_id": $api_id,
-  "api_hash": "$api_hash"
-}
-EOF
 fi
 
-echo "Kurulum tamamlandı. Bot başlatılıyor..."
-python3 userbot.py
+# Botu başlatma
+echo -e "\n\033[1;32mKurulum tamamlandı! Bot başlatılıyor...\033[0m"
+python userbot.py
