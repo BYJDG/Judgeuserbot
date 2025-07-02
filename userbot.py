@@ -1,124 +1,122 @@
 import json
 import os
-import asyncio
-import importlib.util
 from telethon import TelegramClient, events
-from telethon.tl.functions.users import GetFullUserRequest
-from telethon.sessions import StringSession
+from telethon.errors.rpcerrorlist import PhoneNumberBannedError
 
-print("Bot başlatılıyor...")
-
-if not os.path.exists("config.json"):
-    print("config.json bulunamadı!")
-    exit()
-
-with open("config.json", "r") as f:
-    config = json.load(f)
+# Config dosyası varsa yükle
+CONFIG_FILE = "config.json"
+if os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE, "r") as f:
+        config = json.load(f)
+else:
+    config = {}
 
 api_id = config.get("api_id")
 api_hash = config.get("api_hash")
-session_string = config.get("session_string")
-admin_username = config.get("admin_username")
+phone = config.get("phone")
+owner_username = config.get("owner_username")  # Admin için kullanıcı adı örn: "byjudgee"
 
-if not all([api_id, api_hash, session_string, admin_username]):
-    print("Lütfen config.json dosyasındaki tüm alanları doldurun.")
-    exit()
+if not api_id or not api_hash or not phone or not owner_username:
+    print("Lütfen önce config.json dosyasını doldurun veya kurulum scriptini kullanın.")
+    exit(1)
 
-client = TelegramClient(StringSession(session_string), api_id, api_hash)
+client = TelegramClient("session", api_id, api_hash)
 
-filters = {}
-afk_mode = False
+afk = False
 afk_reason = ""
-afk_users = set()
+filter_map = {}
+answered_users = set()  # AFK modunda bir kişiye sadece 1 cevap için
 
 @client.on(events.NewMessage(pattern=r"\.alive"))
 async def alive(event):
     if event.sender_id == (await client.get_me()).id:
-        await event.reply("✅ JudgeUserbot Aktif!")
-
-@client.on(events.NewMessage(pattern=r"\.id"))
-async def get_id(event):
-    if event.sender_id == (await client.get_me()).id:
-        reply = await event.get_reply_message()
-        if reply:
-            await event.reply(f"👤 Kullanıcı ID: `{reply.sender_id}`")
-        else:
-            await event.reply("Lütfen bir mesaja yanıt verin.")
+        await event.reply("Bot aktif ve çalışıyor! 🟢")
 
 @client.on(events.NewMessage(pattern=r"\.wlive"))
 async def wlive(event):
-    try:
-        sender = await event.get_sender()
-        if sender.username != admin_username:
-            await event.reply("❌ Bu komutu kullanmak için yetkiniz yok.")
-            return
-        await event.reply("Userbotunuz çalışıyor ve sana bişey demek istiyor..\nSeni seviyorum ByJudge ❤️\nBot Versiyonu: v1")
-    except Exception as e:
-        await event.reply(f"Hata oluştu: {e}")
+    sender = await event.get_sender()
+    username = sender.username if sender else ""
+    if username.lower() != owner_username.lower():
+        await event.reply("❌ Bu komutu kullanmak için yetkiniz yok.")
+        return
+    await event.reply("Userbotunuz çalışıyor ve sana bişey demek istiyor..\nSeni seviyorum ByJudge ❤️\nBot Versiyonu: v1")
 
 @client.on(events.NewMessage(pattern=r"\.afk(?:\s+(.*))?"))
-async def afk_set(event):
-    global afk_mode, afk_reason, afk_users
+async def afk_cmd(event):
+    global afk, afk_reason, answered_users
     if event.sender_id != (await client.get_me()).id:
         return
-    afk_mode = True
+    afk = True
     afk_reason = event.pattern_match.group(1) or "AFK"
-    afk_users.clear()
-    await event.reply(f"AFK moduna geçildi: {afk_reason}")
+    answered_users = set()
+    await event.reply(f"AFK modu aktif: {afk_reason}")
 
 @client.on(events.NewMessage(pattern=r"\.back"))
-async def afk_off(event):
-    global afk_mode, afk_reason, afk_users
+async def back_cmd(event):
+    global afk, afk_reason, answered_users
     if event.sender_id != (await client.get_me()).id:
         return
-    afk_mode = False
+    afk = False
     afk_reason = ""
-    afk_users.clear()
+    answered_users = set()
     await event.reply("AFK modu kapatıldı.")
 
-@client.on(events.NewMessage())
-async def auto_afk_reply(event):
-    global afk_users
-    if afk_mode and event.is_private and event.sender_id != (await client.get_me()).id:
-        if event.sender_id not in afk_users:
-            afk_users.add(event.sender_id)
-            await event.reply(afk_reason)
-
-@client.on(events.NewMessage(pattern=r"\.filter (.+?) (.+)", outgoing=True))
-async def add_filter(event):
+@client.on(events.NewMessage(pattern=r"\.filter\s+(\S+)\s+(.+)"))
+async def filter_add(event):
+    global filter_map
     if event.sender_id != (await client.get_me()).id:
         return
-    msg, reply = event.pattern_match.group(1), event.pattern_match.group(2)
-    filters[msg.lower()] = reply
-    await event.reply(f"✅ Filter eklendi: `{msg}`")
+    key = event.pattern_match.group(1)
+    val = event.pattern_match.group(2)
+    filter_map[key] = val
+    await event.reply(f"Filter eklendi: '{key}' → '{val}'")
 
-@client.on(events.NewMessage(pattern=r"\.unfilter (.+)", outgoing=True))
-async def remove_filter(event):
+@client.on(events.NewMessage(pattern=r"\.unfilter\s+(\S+)"))
+async def filter_remove(event):
+    global filter_map
     if event.sender_id != (await client.get_me()).id:
         return
-    msg = event.pattern_match.group(1).lower()
-    if msg in filters:
-        del filters[msg]
-        await event.reply(f"🗑 Filter silindi: `{msg}`")
+    key = event.pattern_match.group(1)
+    if key in filter_map:
+        filter_map.pop(key)
+        await event.reply(f"Filter kaldırıldı: '{key}'")
     else:
-        await event.reply("❌ Böyle bir filter yok.")
+        await event.reply(f"Filter bulunamadı: '{key}'")
 
-@client.on(events.NewMessage())
-async def filter_reply(event):
-    if event.is_private and not event.out:
-        msg = event.raw_text.lower()
-        if msg in filters and not afk_mode:
-            await event.reply(filters[msg])
+@client.on(events.NewMessage)
+async def auto_reply(event):
+    global afk, afk_reason, answered_users, filter_map
+    sender_id = event.sender_id
+    me_id = (await client.get_me()).id
 
-# Tüm modülleri yükle
-if os.path.exists("modules"):
-    for filename in os.listdir("modules"):
-        if filename.endswith(".py"):
-            path = os.path.join("modules", filename)
-            spec = importlib.util.spec_from_file_location("module.name", path)
-            foo = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(foo)
+    if sender_id == me_id:
+        return  # Kendi mesajına cevap verme
 
-with client:
-    print("✅ JudgeUserbot başlatıldı!")
-    client.run_until_disconnected()
+    # AFK modu yanıtı
+    if afk:
+        if sender_id not in answered_users:
+            answered_users.add(sender_id)
+            await event.reply(afk_reason)
+        return
+
+    # Filtreli cevap
+    text = event.raw_text.lower()
+    for key in filter_map:
+        if key.lower() in text:
+            await event.reply(filter_map[key])
+            break
+
+async def main():
+    print("Bot başlatılıyor...")
+    await client.start(phone)
+    print("Bot aktif!")
+    await client.run_until_disconnected()
+
+if __name__ == "__main__":
+    import asyncio
+    try:
+        asyncio.run(main())
+    except PhoneNumberBannedError:
+        print("Telefon numaranız Telegram tarafından engellenmiş olabilir.")
+    except Exception as e:
+        print(f"Hata: {e}")
