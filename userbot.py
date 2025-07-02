@@ -1,87 +1,38 @@
-import json
 import os
+import asyncio
 from telethon import TelegramClient, events
+from config import API_ID, API_HASH, session_name
 
-# config.json'u yükle
-if not os.path.exists("config.json"):
-    print("❌ config.json bulunamadı!")
-    exit()
+# Oturum kontrolü
+if not API_ID or not API_HASH:
+    print("HATA: config.py dosyasında API_ID veya API_HASH eksik!")
+    print("Lütfen https://my.telegram.org adresinden API bilgilerinizi alın")
+    exit(1)
 
-with open("config.json", "r") as f:
-    config = json.load(f)
+client = TelegramClient(session_name, API_ID, API_HASH)
 
-api_id = config["api_id"]
-api_hash = config["api_hash"]
+@client.on(events.NewMessage(outgoing=True, pattern=r'\.alive'))
+async def alive(event):
+    await event.edit("`👽 JudgeUserBot Aktif!`")
 
-session_name = "session"
-client = TelegramClient(session_name, api_id, api_hash)
+@client.on(events.NewMessage(outgoing=True, pattern=r'\.help'))
+async def help(event):
+    await event.edit("`🧠 Kullanılabilir Komutlar:`\n"
+                     "`.alive` - Bot durumunu kontrol et\n"
+                     "`.help` - Yardım menüsünü göster\n"
+                     "`.reboot` - Botu yeniden başlat")
 
-owner_id = None  # Botu başlatan kullanıcı
-admin_username = "byjudgee"  # Sadece bu kullanıcı .wlive komutunu kullanabilir
-afk_mode = False
-afk_reason = ""
-filtered_messages = {}
-afk_users = set()
+@client.on(events.NewMessage(outgoing=True, pattern=r'\.reboot'))
+async def reboot(event):
+    await event.edit("`♻️ Bot yeniden başlatılıyor...`")
+    os.system("python userbot.py")
 
-@client.on(events.NewMessage)
-async def handler(event):
-    global afk_mode, afk_reason, afk_users
+async def main():
+    print("\n\033[1;36mJudgeUserBot başarıyla başlatıldı!\033[0m")
+    print("\033[1;33mKullanılabilir komutlar: .alive, .help, .reboot\033[0m")
+    await client.start()
+    await client.run_until_disconnected()
 
-    # Giriş yapan kullanıcıyı owner olarak ata
-    global owner_id
-    if owner_id is None and event.out:
-        owner_id = event.sender_id
-        print(f"Bot sahibi id ayarlandı: {owner_id}")
-
-    # Komutlar sadece owner tarafından çalıştırılır
-    if event.text == ".alive" and event.sender_id == owner_id:
-        await event.reply("✅ Bot aktif ve çalışıyor!")
-    elif event.text.startswith(".afk") and event.sender_id == owner_id:
-        afk_mode = True
-        afk_reason = event.text.split(".afk", 1)[1].strip()
-        await event.reply("AFK moduna geçildi.")
-    elif event.text == ".back" and event.sender_id == owner_id:
-        afk_mode = False
-        afk_reason = ""
-        afk_users.clear()
-        await event.reply("AFK modu kapatıldı.")
-    elif event.text.startswith(".filter") and event.sender_id == owner_id:
-        try:
-            _, msg, reply = event.text.split(" ", 2)
-            filtered_messages[msg.lower()] = reply
-            await event.reply("✅ Filtre eklendi.")
-        except:
-            await event.reply("❌ Hatalı kullanım. .filter <mesaj> <cevap>")
-    elif event.text.startswith(".unfilter") and event.sender_id == owner_id:
-        try:
-            _, msg = event.text.split(" ", 1)
-            filtered_messages.pop(msg.lower(), None)
-            await event.reply("✅ Filtre kaldırıldı.")
-        except:
-            await event.reply("❌ Hatalı kullanım. .unfilter <mesaj>")
-    elif event.text == ".id" and event.sender_id == owner_id:
-        reply = await event.get_reply_message()
-        if reply:
-            await event.reply(f"🆔 Kullanıcı ID: {reply.sender_id}")
-        else:
-            await event.reply("❌ Bir mesaja yanıt vermelisin.")
-    elif event.text == ".wlive":
-        sender = await event.get_sender()
-        if sender.username == admin_username:
-            await event.reply("Userbotunuz çalışıyor ve sana bir şey demek istiyor...\n\n❤️ Seni seviyorum ByJudge!\n\nBot Versiyonu: v1.0")
-        else:
-            await event.reply("❌ Bu komutu kullanmak için yetkiniz yok.")
-    else:
-        # Filtre kontrolü
-        if not event.out and afk_mode and event.sender_id not in afk_users:
-            await event.reply(f"Şu anda AFK'yım. Sebep: {afk_reason}")
-            afk_users.add(event.sender_id)
-        elif not event.out:
-            msg_text = event.text.lower()
-            if msg_text in filtered_messages:
-                await event.reply(filtered_messages[msg_text])
-
-print("Bot başlatılıyor...")
-client.start()
-print("✅ Bot aktif!")
-client.run_until_disconnected()
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
