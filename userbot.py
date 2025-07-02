@@ -1,96 +1,87 @@
-import os import json import asyncio from telethon import TelegramClient, events, functions from telethon.sessions import StringSession
+import json
+import os
+from telethon import TelegramClient, events
 
-print("Bot başlatılıyor...")
+# config.json'u yükle
+if not os.path.exists("config.json"):
+    print("❌ config.json bulunamadı!")
+    exit()
 
-CONFIG_FILE = "config.json" SESSION_FILE = "userbot.session"
+with open("config.json", "r") as f:
+    config = json.load(f)
 
-Kurulum kontrolü ve config dosyasını oluşturma
+api_id = config["api_id"]
+api_hash = config["api_hash"]
 
-def load_config(): if not os.path.exists(CONFIG_FILE): print("İlk kurulum yapılıyor...") api_id = input("API ID: ") api_hash = input("API Hash: ") phone = input("Telefon numaranız (örn: +905...) : ") config = { "api_id": int(api_id), "api_hash": api_hash, "phone": phone, "admin_username": "byjudgee" } with open(CONFIG_FILE, "w") as f: json.dump(config, f, indent=4) else: with open(CONFIG_FILE, "r") as f: config = json.load(f) return config
+session_name = "session"
+client = TelegramClient(session_name, api_id, api_hash)
 
-config = load_config()
-
-client = TelegramClient(SESSION_FILE, config["api_id"], config["api_hash"])
-
-Oturum kontrolü
-
-async def main(): if not await client.is_user_authorized(): await client.start(phone=config["phone"]) print("Giriş yapıldı ve oturum kaydedildi.") else: print("Oturum zaten kayıtlı. Giriş yapılmış.")
-
-me = await client.get_me()
-owner_id = me.id
-print(f"Bot sahibi id ayarlandı: {owner_id}")
-
+owner_id = None  # Botu başlatan kullanıcı
+admin_username = "byjudgee"  # Sadece bu kullanıcı .wlive komutunu kullanabilir
 afk_mode = False
 afk_reason = ""
-afk_replied_users = set()
-filters = {}
+filtered_messages = {}
+afk_users = set()
 
-@client.on(events.NewMessage(pattern=r"\.alive"))
-async def alive_handler(event):
-    if event.sender_id == owner_id:
-        await event.reply("JudgeUserBot Aktif! ✅")
+@client.on(events.NewMessage)
+async def handler(event):
+    global afk_mode, afk_reason, afk_users
 
-@client.on(events.NewMessage(pattern=r"\.id"))
-async def id_handler(event):
-    if event.sender_id == owner_id:
-        if event.reply_to_msg_id:
-            replied = await event.get_reply_message()
-            await event.reply(f"ID: {replied.sender_id}")
-        else:
-            await event.reply(f"ID: {event.sender_id}")
+    # Giriş yapan kullanıcıyı owner olarak ata
+    global owner_id
+    if owner_id is None and event.out:
+        owner_id = event.sender_id
+        print(f"Bot sahibi id ayarlandı: {owner_id}")
 
-@client.on(events.NewMessage(pattern=r"\.afk ?(.*)"))
-async def afk_set(event):
-    nonlocal afk_mode, afk_reason, afk_replied_users
-    if event.sender_id == owner_id:
-        afk_reason = event.pattern_match.group(1)
+    # Komutlar sadece owner tarafından çalıştırılır
+    if event.text == ".alive" and event.sender_id == owner_id:
+        await event.reply("✅ Bot aktif ve çalışıyor!")
+    elif event.text.startswith(".afk") and event.sender_id == owner_id:
         afk_mode = True
-        afk_replied_users = set()
+        afk_reason = event.text.split(".afk", 1)[1].strip()
         await event.reply("AFK moduna geçildi.")
-
-@client.on(events.NewMessage(pattern=r"\.back"))
-async def afk_off(event):
-    nonlocal afk_mode
-    if event.sender_id == owner_id:
+    elif event.text == ".back" and event.sender_id == owner_id:
         afk_mode = False
+        afk_reason = ""
+        afk_users.clear()
         await event.reply("AFK modu kapatıldı.")
-
-@client.on(events.NewMessage(pattern=r"\.filter (.+?) (.+)", outgoing=True))
-async def add_filter(event):
-    if event.sender_id == owner_id:
-        keyword, reply = event.pattern_match.group(1), event.pattern_match.group(2)
-        filters[keyword.lower()] = reply
-        await event.reply(f"Filter eklendi: {keyword} -> {reply}")
-
-@client.on(events.NewMessage(pattern=r"\.unfilter (.+)", outgoing=True))
-async def remove_filter(event):
-    if event.sender_id == owner_id:
-        keyword = event.pattern_match.group(1).lower()
-        if keyword in filters:
-            del filters[keyword]
-            await event.reply(f"Filter kaldırıldı: {keyword}")
+    elif event.text.startswith(".filter") and event.sender_id == owner_id:
+        try:
+            _, msg, reply = event.text.split(" ", 2)
+            filtered_messages[msg.lower()] = reply
+            await event.reply("✅ Filtre eklendi.")
+        except:
+            await event.reply("❌ Hatalı kullanım. .filter <mesaj> <cevap>")
+    elif event.text.startswith(".unfilter") and event.sender_id == owner_id:
+        try:
+            _, msg = event.text.split(" ", 1)
+            filtered_messages.pop(msg.lower(), None)
+            await event.reply("✅ Filtre kaldırıldı.")
+        except:
+            await event.reply("❌ Hatalı kullanım. .unfilter <mesaj>")
+    elif event.text == ".id" and event.sender_id == owner_id:
+        reply = await event.get_reply_message()
+        if reply:
+            await event.reply(f"🆔 Kullanıcı ID: {reply.sender_id}")
         else:
-            await event.reply("Böyle bir filter yok.")
-
-@client.on(events.NewMessage(pattern=r"\.wlive"))
-async def wlive_command(event):
-    sender = await event.get_sender()
-    if sender.username and sender.username.lower() == config["admin_username"].lower():
-        await event.reply("Userbotunuz çalışıyor ve sana bişey demek istiyor..\nSeni seviyorum ByJudge ❤️\nBot Versiyonu: v1")
+            await event.reply("❌ Bir mesaja yanıt vermelisin.")
+    elif event.text == ".wlive":
+        sender = await event.get_sender()
+        if sender.username == admin_username:
+            await event.reply("Userbotunuz çalışıyor ve sana bir şey demek istiyor...\n\n❤️ Seni seviyorum ByJudge!\n\nBot Versiyonu: v1.0")
+        else:
+            await event.reply("❌ Bu komutu kullanmak için yetkiniz yok.")
     else:
-        await event.reply("Bu komutu kullanmak için yetkiniz yok.")
+        # Filtre kontrolü
+        if not event.out and afk_mode and event.sender_id not in afk_users:
+            await event.reply(f"Şu anda AFK'yım. Sebep: {afk_reason}")
+            afk_users.add(event.sender_id)
+        elif not event.out:
+            msg_text = event.text.lower()
+            if msg_text in filtered_messages:
+                await event.reply(filtered_messages[msg_text])
 
-@client.on(events.NewMessage())
-async def auto_reply(event):
-    if event.sender_id == owner_id:
-        return
-    if afk_mode and event.sender_id not in afk_replied_users:
-        afk_replied_users.add(event.sender_id)
-        await event.reply(f"{afk_reason}")
-    elif event.raw_text.lower() in filters:
-        await event.reply(filters[event.raw_text.lower()])
-
-await client.run_until_disconnected()
-
-with client: client.loop.run_until_complete(main())
-
+print("Bot başlatılıyor...")
+client.start()
+print("✅ Bot aktif!")
+client.run_until_disconnected()
