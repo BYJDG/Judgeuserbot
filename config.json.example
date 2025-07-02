@@ -1,4 +1,5 @@
 {
-  "api_id": 123456,
-  "api_hash": "abcdef1234567890abcdef1234567890"
+  "api_id": "API_ID'niz",
+  "api_hash": "API_HASH'iniz",
+  "phone": "Telefon Numaranız"
 }
