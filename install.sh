@@ -2,42 +2,55 @@
 
 echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
 
-pkg update -y && pkg upgrade -y
+# Gerekli paketleri güncelle ve yükle
+pkg update -y
+pkg upgrade -y
 pkg install python git ffmpeg libffi -y
 
+# Repo kontrolü ve klonlama
 if [ -d "Judgeuserbot" ]; then
-    echo "Judgeuserbot klasörü zaten var, güncelleniyor..."
-    cd Judgeuserbot && git pull
+    echo "Judgeuserbot dizini zaten mevcut, güncelleniyor..."
+    cd Judgeuserbot
+    git pull
 else
     echo "JudgeUserBot repozitorisi klonlanıyor..."
     git clone https://github.com/BYJDG/Judgeuserbot.git
     cd Judgeuserbot
 fi
 
+# Python paketlerini yükle
 pip install -r requirements.txt
 
-SESSION_FILE="session.session"
-if [ -f "$SESSION_FILE" ] || [ -f "$SESSION_FILE-journal" ]; then
-    echo "Zaten kayıtlı bir oturumunuz mevcut."
-    echo "Yeniden giriş yapmak ister misiniz? (Y/n)"
-    stty sane
-    read answer
-    case "$answer" in
-        [Yy]* )
-            echo "Eski oturum siliniyor, yeni oturum oluşturulacak..."
-            rm -f session.session session.session-journal
-            python3 userbot.py
-            ;;
-        [Nn]* | "" )
-            echo "Mevcut oturumdan devam ediliyor..."
-            python3 userbot.py
-            ;;
-        * )
-            echo "Geçersiz giriş. Mevcut oturumdan devam ediliyor..."
-            python3 userbot.py
-            ;;
-    esac
+# Config kontrolü ve API bilgilerini alma
+if [ -f "config.json" ]; then
+    echo "config.json dosyası zaten mevcut."
+    read -p "Mevcut oturumu kullanmak istiyor musunuz? (Y/n): " answer
+    if [[ "$answer" == "n" || "$answer" == "N" ]]; then
+        echo "Yeni API bilgilerinizi giriniz."
+        read -p "API ID: " api_id
+        read -p "API HASH: " api_hash
+
+        cat > config.json <<EOF
+{
+  "api_id": $api_id,
+  "api_hash": "$api_hash"
+}
+EOF
+    else
+        echo "Mevcut ayarlarla devam ediliyor."
+    fi
 else
-    echo "Yeni oturum oluşturulacak."
-    python3 userbot.py
+    echo "Lütfen Telegram API bilgilerinizi giriniz."
+    read -p "API ID: " api_id
+    read -p "API HASH: " api_hash
+
+    cat > config.json <<EOF
+{
+  "api_id": $api_id,
+  "api_hash": "$api_hash"
+}
+EOF
 fi
+
+echo "Kurulum tamamlandı. Bot başlatılıyor..."
+python3 userbot.py
