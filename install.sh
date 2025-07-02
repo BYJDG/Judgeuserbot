@@ -5,9 +5,8 @@ echo -e "\033[1;36m[ JUDGE USERBOT KURULUM ]\033[0m"
 echo "-------------------------------------"
 
 # 1. Gerekli paketler
-echo -e "\033[1;33m● Paketler yükleniyor...\033[0m"
 pkg update -y && pkg upgrade -y
-pkg install -y python git ffmpeg libffi wget nano
+pkg install -y python git ffmpeg libffi
 
 # 2. Repo işlemleri
 if [ ! -d "Judgeuserbot" ]; then
@@ -27,38 +26,37 @@ if [ ! -f "config.py" ]; then
     exit 1
 fi
 
-# 4. Session yönetimi (GÜNCELLENMİŞ KISIM)
+# 4. Session yönetimi (GÜNCELLENMİŞ)
 SESSION_FILE="judge.session"
 
 if [ -f "$SESSION_FILE" ]; then
     echo -e "\033[1;32m✔ Mevcut oturum bulundu:\033[0m"
     echo -e "Dosya: \033[1;33m$SESSION_FILE\033[0m"
-    echo -e "Oluşturulma: \033[1;33m$(stat -c %y "$SESSION_FILE")\033[0m"
+    echo -e "Boyut: \033[1;33m$(du -h "$SESSION_FILE" | cut -f1)\033[0m"
     
     # Kullanıcı seçimi
-    PS3="Mevcut oturumu kullanmak istiyor musunuz? "
-    select opt in "Evet" "Hayır (Yeni giriş yap)" "Çıkış"; do
-        case $opt in
-            "Evet")
+    while true; do
+        read -p "Mevcut oturumla devam etmek istiyor musunuz? (e/h): " choice
+        case $choice in
+            [Ee]* )
                 echo "Mevcut oturumla devam ediliyor..."
+                SESSION_CHOICE="existing"
                 break
                 ;;
-            "Hayır (Yeni giriş yap)")
+            [Hh]* )
                 rm -f "$SESSION_FILE"
                 echo "Yeni oturum oluşturulacak..."
+                SESSION_CHOICE="new"
                 break
                 ;;
-            "Çıkış")
-                echo "Kurulum iptal edildi."
-                exit 0
-                ;;
-            *) 
-                echo "Geçersiz seçim! Lütfen 1-3 arası seçim yapın."
+            * )
+                echo "Lütfen 'e' (evet) veya 'h' (hayır) girin!"
                 ;;
         esac
     done
 else
     echo "Yeni oturum oluşturulacak..."
+    SESSION_CHOICE="new"
 fi
 
 # 5. Bağımlılıklar
@@ -66,4 +64,8 @@ pip install -r requirements.txt
 
 # 6. Botu başlat
 echo -e "\n\033[1;32m✓ Bot başlatılıyor...\033[0m"
-python userbot.py
+if [ "$SESSION_CHOICE" = "existing" ]; then
+    python userbot.py --existing-session
+else
+    python userbot.py
+fi
