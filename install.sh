@@ -2,38 +2,54 @@
 
 echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
 
-# Paketleri güncelle ve gerekli olanları kur
-pkg update -y
-pkg upgrade -y
+# Bağımlılıkların kurulumu
+echo "Gerekli paketler kontrol ediliyor..."
+pkg update -y && pkg upgrade -y
 pkg install -y python git ffmpeg libffi
 
-# Python paketlerini kur
-pip install telethon
+# Pip kurulumu
+echo "PIP kurulumu yapılıyor..."
+curl -sS https://bootstrap.pypa.io/get-pip.py | python
 
-# Repoyu klonla (eğer yoksa)
+# Gerekli Python paketleri
+echo "Gerekli Python modülleri yükleniyor..."
+pip install -r requirements.txt
+
+# JudgeUserBot klasörü kontrolü
 if [ ! -d "Judgeuserbot" ]; then
+    echo "Repo klonlanıyor..."
     git clone https://github.com/BYJDG/Judgeuserbot.git
+    cd Judgeuserbot
 else
-    echo "Judgeuserbot klasörü zaten mevcut."
+    cd Judgeuserbot
+    echo "Repo zaten var, içine giriliyor..."
 fi
 
-cd Judgeuserbot
+# Oturum dosyası kontrolü
+SESSION_FILE="session.session"
 
-# Config bilgilerini kullanıcıdan al
-read -p "API ID: " api_id
-read -p "API HASH: " api_hash
-read -p "Telefon numaranız (ülke kodu ile, örn: +90...): " phone
-read -p "Admin kullanıcı adı (örn: byjudgee): " owner
+if [ -f "$SESSION_FILE" ]; then
+    echo -n "Zaten bir oturum mevcut. Yeniden giriş yapmak ister misiniz? (Y/n): "
+    read answer
+    if [[ "$answer" =~ ^[Yy]$ ]]; then
+        echo "Eski oturum siliniyor..."
+        rm -f "$SESSION_FILE" "$SESSION_FILE-journal"
+    else
+        echo "Kayıtlı oturumdan devam ediliyor..."
+    fi
+fi
 
-# config.json oluştur
-cat > config.json <<EOF
-{
-  "api_id": $api_id,
-  "api_hash": "$api_hash",
-  "phone": "$phone",
-  "owner_username": "$owner"
-}
-EOF
+# Giriş yapılmamışsa API bilgileri alınıyor
+if [ ! -f "$SESSION_FILE" ]; then
+    echo "Lütfen Telegram API bilgilerinizi giriniz."
+    read -p "API ID: " api_id
+    read -p "API HASH: " api_hash
+    echo '{' > config.json
+    echo "  \"api_id\": \"$api_id\"," >> config.json
+    echo "  \"api_hash\": \"$api_hash\"" >> config.json
+    echo '}' >> config.json
+fi
 
-echo "Kurulum tamamlandı! Bot başlatılıyor..."
-python3 userbot.py
+# Bot başlatılıyor
+echo "Kurulum tamamlandı. Bot başlatılıyor..."
+python userbot.py
