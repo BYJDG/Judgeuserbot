@@ -1,5 +1,5 @@
 {
-  "api_id": "API_ID'niz",
-  "api_hash": "API_HASH'iniz",
-  "phone": "Telefon Numaranız"
+  "api_id": 123456,
+  "api_hash": "abc123def456",
+  "owner_username": "byjudgee"
 }
