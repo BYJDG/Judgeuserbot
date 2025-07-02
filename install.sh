@@ -17,12 +17,20 @@ fi
 pip install -r requirements.txt
 
 if [ -f "config.json" ]; then
-    echo "config.json dosyası zaten mevcut."
-    read -p "Mevcut oturumu kullanmak istiyor musunuz? (Y/n): " answer
-    if [[ "$answer" == "n" || "$answer" == "N" ]]; then
+    echo "config.json zaten mevcut."
+    read -p "Yeni API bilgileri ile tekrar giriş yapmak ister misiniz? (Y/n): " answer
+    if [[ "$answer" == "Y" || "$answer" == "y" ]]; then
         echo "Yeni API bilgilerinizi giriniz."
-        read -p "API ID (sadece rakam): " api_id
+        while true; do
+            read -p "API ID (sadece rakam): " api_id
+            if [[ "$api_id" =~ ^[0-9]+$ ]]; then
+                break
+            else
+                echo "Lütfen sadece rakam giriniz!"
+            fi
+        done
         read -p "API HASH: " api_hash
+
         cat > config.json <<EOF
 {
   "api_id": $api_id,
@@ -30,12 +38,20 @@ if [ -f "config.json" ]; then
 }
 EOF
     else
-        echo "Mevcut ayarlarla devam ediliyor."
+        echo "Mevcut config.json ile devam ediliyor."
     fi
 else
     echo "Lütfen Telegram API bilgilerinizi giriniz."
-    read -p "API ID (sadece rakam): " api_id
+    while true; do
+        read -p "API ID (sadece rakam): " api_id
+        if [[ "$api_id" =~ ^[0-9]+$ ]]; then
+            break
+        else
+            echo "Lütfen sadece rakam giriniz!"
+        fi
+    done
     read -p "API HASH: " api_hash
+
     cat > config.json <<EOF
 {
   "api_id": $api_id,
