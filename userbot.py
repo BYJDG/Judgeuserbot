@@ -8,8 +8,15 @@ afk = False
 afk_reason = ""
 filters = {}
 
+async def is_bot_owner(event):
+    me = await client.get_me()
+    sender = await event.get_sender()
+    return sender.id == me.id
+
 @client.on(events.NewMessage(pattern=r'^\.alive$'))
 async def alive(event):
+    if not await is_bot_owner(event):
+        return  # Sadece bot sahibi kullanabilir
     me = await client.get_me()
     first_name = me.first_name if me.first_name else "User"
     text = f"Userbotunuz çalışıyor ve sana bişey demek istiyor.. Seni seviyorum {first_name} ❤️\nBot Versiyonu: v1.0"
@@ -36,6 +43,8 @@ async def wlive(event):
 
 @client.on(events.NewMessage(pattern=r'^\.judge$'))
 async def judge_help(event):
+    if not await is_bot_owner(event):
+        return  # Sadece bot sahibi kullanabilir
     help_text = (
         "Judge Userbot Komutları v1.0:\n\n"
         ".alive - Botun çalışıp çalışmadığını kontrol eder.\n"
@@ -51,9 +60,10 @@ async def judge_help(event):
     except:
         await event.reply(help_text)
 
-# Basit AFK komut örneği (isteğe göre geliştirilebilir)
 @client.on(events.NewMessage(pattern=r'^\.afk(?: (.+))?'))
 async def set_afk(event):
+    if not await is_bot_owner(event):
+        return
     global afk, afk_reason
     afk = True
     afk_reason = event.pattern_match.group(1) or "Sebep belirtilmedi."
@@ -61,14 +71,17 @@ async def set_afk(event):
 
 @client.on(events.NewMessage(pattern=r'^\.back$'))
 async def back(event):
+    if not await is_bot_owner(event):
+        return
     global afk, afk_reason
     afk = False
     afk_reason = ""
     await event.reply("AFK modundan çıkıldı.")
 
-# Filtre komutları basit örnek:
 @client.on(events.NewMessage(pattern=r'^\.filter (.+?) (.+)'))
 async def add_filter(event):
+    if not await is_bot_owner(event):
+        return
     global filters
     keyword = event.pattern_match.group(1).lower()
     response = event.pattern_match.group(2)
@@ -77,6 +90,8 @@ async def add_filter(event):
 
 @client.on(events.NewMessage(pattern=r'^\.unfilter (.+)'))
 async def remove_filter(event):
+    if not await is_bot_owner(event):
+        return
     global filters
     keyword = event.pattern_match.group(1).lower()
     if keyword in filters:
@@ -87,6 +102,8 @@ async def remove_filter(event):
 
 @client.on(events.NewMessage())
 async def filter_response(event):
+    if not await is_bot_owner(event):
+        return
     global filters
     text = event.raw_text.lower()
     if text in filters:
