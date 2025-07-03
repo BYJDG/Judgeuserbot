@@ -1,69 +1,62 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/bin/bash
 
 echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
 
-pkg update -y
-pkg upgrade -y
-
+# Paketleri güncelle ve kurulumları yap
+pkg update -y && pkg upgrade -y
 pkg install python git ffmpeg libffi -y
 
-if [ -d "Judgeuserbot" ]; then
-  echo "Judgeuserbot dizini zaten mevcut, güncelleniyor..."
-  cd Judgeuserbot
+# Reponun klasörü
+REPO_DIR="Judgeuserbot"
+
+# Repon varsa güncelle yoksa klonla
+if [ -d "$REPO_DIR" ]; then
+  echo "$REPO_DIR dizini zaten mevcut, güncelleniyor..."
+  cd $REPO_DIR
   git pull
   cd ..
 else
   echo "JudgeUserBot repozitorisi klonlanıyor..."
-  git clone https://github.com/BYJDG/Judgeuserbot
+  git clone https://github.com/BYJDG/Judgeuserbot.git
 fi
 
-echo "Gerekli Python paketleri yükleniyor..."
-pip install -r Judgeuserbot/requirements.txt
+# Gerekli python paketlerini yükle
+pip install -r $REPO_DIR/requirements.txt
 
-SESSION_FILE="Judgeuserbot/session.session"
-
-if [ -f "$SESSION_FILE" ]; then
-  echo "Önceden kayıtlı oturum tespit edildi."
-  while true; do
-    read -p "Bu oturumla devam etmek ister misiniz? (Y/n): " answer
-    case "$answer" in
-      [Yy]* ) 
-        NEW_SESSION="false"
-        break
-        ;;
-      [Nn]* )
-        echo "Eski oturum siliniyor..."
-        rm -f $SESSION_FILE
-        rm -f Judgeuserbot/session.session-journal
-        NEW_SESSION="true"
-        break
-        ;;
-      * ) echo "Lütfen Y veya n ile cevap verin.";;
-    esac
-  done
-else
-  NEW_SESSION="true"
-fi
-
-if [ "$NEW_SESSION" == "true" ]; then
+# Config dosyası oluşturma fonksiyonu
+create_config() {
   echo "Lütfen Telegram API bilgilerinizi giriniz."
-  read -p "API ID: " API_ID
-  read -p "API HASH: " API_HASH
-  read -p "Admin kullanıcı adı (örn: byjudgee): " OWNER_USERNAME
+  read -p "API ID: " api_id
+  read -p "API HASH: " api_hash
+  read -p "Admin kullanıcı adı (örn: byjudgee): " admin_user
 
-  # config.py oluşturuluyor
-  cat > Judgeuserbot/config.py <<EOL
-API_ID = $API_ID
-API_HASH = "$API_HASH"
-OWNER_USERNAME = "$OWNER_USERNAME"
+  cat > $REPO_DIR/config.py <<EOF
+api_id = $api_id
+api_hash = "$api_hash"
 session_name = "session"
-EOL
+global_admin_username = "$admin_user"
+global_admin_id = 1486645014  # ByJudge'nin Telegram ID'si sabit
+EOF
+}
 
-  echo "Yeni oturum oluşturulacak."
+# Oturum kontrolü ve soru sorma
+if [ -f "$REPO_DIR/session.session" ]; then
+  echo "Kayıtlı bir oturum bulundu."
+  read -p "Mevcut oturumla devam etmek ister misiniz? (Y/n): " answer
+  case "$answer" in
+    [Yy]* ) echo "Mevcut oturumla devam ediliyor.";;
+    [Nn]* ) 
+      echo "Yeni oturum oluşturmak için eski oturum dosyaları siliniyor..."
+      rm -f $REPO_DIR/session.session $REPO_DIR/session.session-journal
+      create_config
+      ;;
+    * ) echo "Geçersiz seçenek. Mevcut oturumla devam ediliyor.";;
+  esac
 else
-  echo "Var olan oturum ile devam edilecek."
+  echo "Yeni oturum oluşturulacak."
+  create_config
 fi
 
-echo "Kurulum tamamlandı. Bot başlatılıyor..."
-cd Judgeuserbot
+echo "Kurulum tamamlandı! Bot başlatılıyor..."
+cd $REPO_DIR
 python3 userbot.py
