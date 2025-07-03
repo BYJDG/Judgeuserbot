@@ -20,20 +20,27 @@ fi
 echo "Gerekli Python paketleri yükleniyor..."
 pip install -r Judgeuserbot/requirements.txt
 
-# Session kontrolü
 SESSION_FILE="Judgeuserbot/session.session"
 
 if [ -f "$SESSION_FILE" ]; then
   echo "Önceden kayıtlı oturum tespit edildi."
-  read -p "Bu oturumla devam etmek ister misiniz? (Y/n): " answer
-  if [[ "$answer" == "n" || "$answer" == "N" ]]; then
-    echo "Eski oturum siliniyor..."
-    rm -f $SESSION_FILE
-    rm -f Judgeuserbot/session.session-journal
-    NEW_SESSION="true"
-  else
-    NEW_SESSION="false"
-  fi
+  while true; do
+    read -p "Bu oturumla devam etmek ister misiniz? (Y/n): " answer
+    case "$answer" in
+      [Yy]* ) 
+        NEW_SESSION="false"
+        break
+        ;;
+      [Nn]* )
+        echo "Eski oturum siliniyor..."
+        rm -f $SESSION_FILE
+        rm -f Judgeuserbot/session.session-journal
+        NEW_SESSION="true"
+        break
+        ;;
+      * ) echo "Lütfen Y veya n ile cevap verin.";;
+    esac
+  done
 else
   NEW_SESSION="true"
 fi
