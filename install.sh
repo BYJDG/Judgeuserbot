@@ -2,61 +2,47 @@
 
 echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
 
-# Paketleri güncelle ve kurulumları yap
+# Termux paket güncelleme ve temel araçların kurulumu
 pkg update -y && pkg upgrade -y
-pkg install python git ffmpeg libffi -y
+pkg install -y python git ffmpeg libffi
 
-# Reponun klasörü
-REPO_DIR="Judgeuserbot"
+# Python paketleri yükleniyor
+pip install --upgrade pip
+pip install telethon==1.40.0
 
-# Repon varsa güncelle yoksa klonla
-if [ -d "$REPO_DIR" ]; then
-  echo "$REPO_DIR dizini zaten mevcut, güncelleniyor..."
-  cd $REPO_DIR
-  git pull
-  cd ..
+# JudgeUserBot repozitorisini klonla veya güncelle
+if [ ! -d "Judgeuserbot" ]; then
+    git clone https://github.com/BYJDG/Judgeuserbot.git
 else
-  echo "JudgeUserBot repozitorisi klonlanıyor..."
-  git clone https://github.com/BYJDG/Judgeuserbot.git
+    echo "Judgeuserbot dizini zaten mevcut, güncelleniyor..."
+    cd Judgeuserbot
+    git pull
+    cd ..
 fi
 
-# Gerekli python paketlerini yükle
-pip install -r $REPO_DIR/requirements.txt
+# config.py oluşturma (API ID, Hash, session_name, admin bilgileri)
+CONFIG_FILE="Judgeuserbot/config.py"
 
-# Config dosyası oluşturma fonksiyonu
-create_config() {
-  echo "Lütfen Telegram API bilgilerinizi giriniz."
-  read -p "API ID: " api_id
-  read -p "API HASH: " api_hash
-  read -p "Admin kullanıcı adı (örn: byjudgee): " admin_user
+echo ""
+echo "Lütfen Telegram API bilgilerinizi giriniz."
+read -p "API ID: " API_ID
+read -p "API HASH: " API_HASH
+read -p "Session adı (örnek: session): " SESSION_NAME
+read -p "Admin kullanıcı adı (örn: byjudgee): " ADMIN_USERNAME
+read -p "Admin kullanıcı ID'si (örnek: 1486645014): " ADMIN_ID
 
-  cat > $REPO_DIR/config.py <<EOF
-api_id = $api_id
-api_hash = "$api_hash"
-session_name = "session"
-global_admin_username = "$admin_user"
-global_admin_id = 1486645014  # ByJudge'nin Telegram ID'si sabit
+cat > $CONFIG_FILE << EOF
+api_id = $API_ID
+api_hash = "$API_HASH"
+session_name = "$SESSION_NAME"
+admin_username = "$ADMIN_USERNAME"
+admin_id = $ADMIN_ID
 EOF
-}
 
-# Oturum kontrolü ve soru sorma
-if [ -f "$REPO_DIR/session.session" ]; then
-  echo "Kayıtlı bir oturum bulundu."
-  read -p "Mevcut oturumla devam etmek ister misiniz? (Y/n): " answer
-  case "$answer" in
-    [Yy]* ) echo "Mevcut oturumla devam ediliyor.";;
-    [Nn]* ) 
-      echo "Yeni oturum oluşturmak için eski oturum dosyaları siliniyor..."
-      rm -f $REPO_DIR/session.session $REPO_DIR/session.session-journal
-      create_config
-      ;;
-    * ) echo "Geçersiz seçenek. Mevcut oturumla devam ediliyor.";;
-  esac
-else
-  echo "Yeni oturum oluşturulacak."
-  create_config
-fi
-
+echo ""
+echo "config.py dosyası oluşturuldu."
 echo "Kurulum tamamlandı! Bot başlatılıyor..."
-cd $REPO_DIR
+
+# Botu başlat
+cd Judgeuserbot
 python3 userbot.py
