@@ -52,7 +52,6 @@ async def judge_help(event):
         ".back - AFK modundan çıkar.\n"
         ".filter <mesaj> <cevap> - Filtreli otomatik cevap ekler.\n"
         ".unfilter <mesaj> - Filtreyi kaldırır.\n"
-        ".wlive - Owner komutu, sadece sahibi kullanabilir.\n"
         ".judge - Komut listesini gösterir."
     )
     try:
