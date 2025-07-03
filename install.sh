@@ -1,71 +1,53 @@
 #!/bin/bash
 
-clear
-echo -e "\033[1;36m[ JUDGE USERBOT KURULUM ]\033[0m"
-echo "-------------------------------------"
+echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
 
-# 1. Gerekli paketler
-pkg update -y && pkg upgrade -y
-pkg install -y python git ffmpeg libffi
+# Paket güncelleme & kurulum
+pkg update -y
+pkg upgrade -y
+pkg install python git ffmpeg libffi -y
 
-# 2. Repo işlemleri
-if [ ! -d "Judgeuserbot" ]; then
-    git clone https://github.com/BYJDG/Judgeuserbot.git
-    cd Judgeuserbot
+# Repo klonlama veya güncelleme
+if [ -d "Judgeuserbot" ]; then
+  echo "Judgeuserbot dizini zaten mevcut, güncelleniyor..."
+  cd Judgeuserbot && git pull
+  cd ..
 else
-    cd Judgeuserbot
-    git reset --hard
-    git pull origin main
+  echo "JudgeUserBot repozitorisi klonlanıyor..."
+  git clone https://github.com/BYJDG/Judgeuserbot.git
 fi
 
-# 3. Config kontrolü
-if [ ! -f "config.py" ]; then
-    cp config.py.example config.py
-    echo -e "\033[1;31m✘ Lütfen config.py dosyasını düzenleyin!\033[0m"
-    nano config.py
-    exit 1
+# Python paketleri kurulumu
+pip install -r Judgeuserbot/requirements.txt
+
+# config.py kontrolü ve oluşturulması
+if [ ! -f "Judgeuserbot/config.py" ]; then
+  echo "config.py dosyası bulunamadı, varsayılan config.py oluşturuluyor..."
+  cat > Judgeuserbot/config.py <<EOL
+api_id = 123456
+api_hash = "your_api_hash_here"
+owner_username = "byjudgee"
+session_name = "session"
+EOL
+  echo "Lütfen Judgeuserbot/config.py dosyasını düzenleyin ve gerçek API bilgilerinizi girin."
 fi
 
-# 4. Session yönetimi (GÜNCELLENMİŞ)
-SESSION_FILE="judge.session"
-
-if [ -f "$SESSION_FILE" ]; then
-    echo -e "\033[1;32m✔ Mevcut oturum bulundu:\033[0m"
-    echo -e "Dosya: \033[1;33m$SESSION_FILE\033[0m"
-    echo -e "Boyut: \033[1;33m$(du -h "$SESSION_FILE" | cut -f1)\033[0m"
-    
-    # Kullanıcı seçimi
-    while true; do
-        read -p "Mevcut oturumla devam etmek istiyor musunuz? (e/h): " choice
-        case $choice in
-            [Ee]* )
-                echo "Mevcut oturumla devam ediliyor..."
-                SESSION_CHOICE="existing"
-                break
-                ;;
-            [Hh]* )
-                rm -f "$SESSION_FILE"
-                echo "Yeni oturum oluşturulacak..."
-                SESSION_CHOICE="new"
-                break
-                ;;
-            * )
-                echo "Lütfen 'e' (evet) veya 'h' (hayır) girin!"
-                ;;
-        esac
-    done
+# Session kontrolü ve kullanıcıya sorulması
+SESSION_PATH="Judgeuserbot/session.session"
+if [ -f "$SESSION_PATH" ]; then
+  echo "Zaten kayıtlı bir session dosyanız var."
+  read -p "Kayıtlı session ile devam etmek ister misiniz? (Y/n): " answer
+  if [[ "$answer" == "n" || "$answer" == "N" ]]; then
+    echo "Eski session dosyaları siliniyor..."
+    rm -f Judgeuserbot/*.session Judgeuserbot/*.session-journal
+    echo "Yeni oturum oluşturulacak."
+  else
+    echo "Kayıtlı session ile devam edilecek."
+  fi
 else
-    echo "Yeni oturum oluşturulacak..."
-    SESSION_CHOICE="new"
+  echo "Yeni oturum oluşturulacak."
 fi
 
-# 5. Bağımlılıklar
-pip install -r requirements.txt
-
-# 6. Botu başlat
-echo -e "\n\033[1;32m✓ Bot başlatılıyor...\033[0m"
-if [ "$SESSION_CHOICE" = "existing" ]; then
-    python userbot.py --existing-session
-else
-    python userbot.py
-fi
+# Bot başlatma
+echo "Kurulum tamamlandı. Bot başlatılıyor..."
+python3 Judgeuserbot/userbot.py
