@@ -24,7 +24,7 @@ async def set_afk(event):
         afk = True
         afk_reason = event.pattern_match.group(1) or "AFK moduna geçtim."
         afk_users_replied.clear()
-        await event.edit(f"AFK moduna geçtin. Sebep: {afk_reason}")
+        await event.edit(f"AFK moduna aktif. Sebep: {afk_reason}")
 
 @client.on(events.NewMessage(pattern=r"\.back"))
 async def back_from_afk(event):
