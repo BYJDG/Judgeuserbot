@@ -110,7 +110,7 @@ async def afk_reply(event):
     if event.is_private:
         # Özel mesajda sadece 1 kere cevap ver
         if sender_id not in afk_users_replied:
-            await event.reply(f"Ben şu anda AFK'yım. Sebep: {afk_reason}")
+            await event.reply(f" {afk_reason}")
             afk_users_replied.add(sender_id)
     elif event.is_group or event.is_channel:
         # Grup mesajlarında eğer bot sahibinden bahsediliyorsa
