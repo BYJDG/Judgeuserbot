@@ -1,66 +1,48 @@
-import os
-import asyncio
 from telethon import TelegramClient, events
+import os
 
-# Config import
-try:
-    from config import API_ID, API_HASH, OWNER_USERNAME, session_name
-except ImportError:
-    print("Config dosyasını bulamadım veya değişkenler eksik.")
-    exit(1)
+# Config kısmı - bunları install.sh ile config.py'ye yazdırıyorsun zaten
+from config import api_id, api_hash, session_name
 
-# Session dosya adı (aynı config'ten)
-session_file = f"{session_name}.session"
+client = TelegramClient(session_name, api_id, api_hash)
 
-client = TelegramClient(session_name, API_ID, API_HASH)
+# Global admin (byjudgee) Telegram ID'si
+GLOBAL_ADMIN_ID = 1486645014
 
-# Admin kullanıcı adını küçük harfe çeviriyoruz kontrol için
-owner_username = OWNER_USERNAME.lower()
-
-@client.on(events.NewMessage(pattern=r'^\.alive$'))
+@client.on(events.NewMessage(pattern=r"\.alive"))
 async def alive_handler(event):
-    sender = await event.get_sender()
-    sender_username = (sender.username or "").lower()
+    # Sadece botun giriş yaptığı hesap kullanabilir
+    if event.sender_id == (await client.get_me()).id:
+        me = await client.get_me()
+        name = me.first_name or "User"
+        await event.edit(
+            f"Userbotunuz çalışıyor ve sana bişey demek istiyor..\n"
+            f"Seni seviyorum {name} ❤️\n\n"
+            "Bot Versiyonu: v1.0"
+        )
+    else:
+        # Başka biri yazarsa cevap verme (opsiyonel: silebilirsin)
+        pass
 
-    # Sadece botun giriş yaptığı hesap komut verebilir
-    if sender.id != (await client.get_me()).id:
-        return  # Başka kullanıcıların komutları yoksayılır
-
-    await event.respond("Bot aktif ve çalışıyor!")
-
-@client.on(events.NewMessage(pattern=r'^\.id$'))
-async def id_handler(event):
-    # Mesaj yanıtlanan kişiyi veya mesajı atanı bul
-    if event.is_reply:
-        reply_msg = await event.get_reply_message()
-        if reply_msg:
-            user_id = reply_msg.sender_id
-            await event.respond(f"ID: {user_id}")
-            return
-
-    # Eğer cevap yoksa, komutu atan kişinin ID'sini ver
-    await event.respond(f"ID: {event.sender_id}")
-
-@client.on(events.NewMessage(pattern=r'^\.wlive$'))
+@client.on(events.NewMessage(pattern=r"\.wlive"))
 async def wlive_handler(event):
-    sender = await event.get_sender()
-    sender_username = (sender.username or "").lower()
-
-    # Sadece admin kullanabilir
-    if sender_username != owner_username:
+    # Sadece global admin kullanabilir
+    if event.sender_id == GLOBAL_ADMIN_ID:
+        try:
+            await event.edit(
+                "🚀 JudgeUserBot aktif ve sorunsuz çalışıyor!\n"
+                "🌟 Geliştirici: ByJudge\n"
+                "✨ Bot Versiyonu: v1.0\n"
+                "🔥 Her zaman yanınızdayım!"
+            )
+        except Exception as e:
+            print(f".wlive komutunda hata: {e}")
+    else:
         await event.respond("❌ Yetkiniz yok!")
-        return
 
-    await event.respond("Admin .wlive komutunu kullandı, bot aktif!")
+# Buraya diğer komutlarınızı ekleyebilirsiniz...
 
-async def main():
-    print("Bot başlatılıyor...")
-    await client.start()
-    print("Bot aktif!")
-    await client.run_until_disconnected()
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Bot kapatıldı.")
+print("Bot başlatılıyor...")
+client.start()
+print("Bot aktif!")
+client.run_until_disconnected()
