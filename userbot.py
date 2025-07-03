@@ -124,7 +124,7 @@ async def afk_notify(event):
         return
     if sender.id not in afk_users_notified:
         afk_users_notified.add(sender.id)
-        await event.reply(f"Şu anda AFK modundayım.\nSebep: {afk_reason}")
+        await event.reply(f" {afk_reason}")
 
 async def main():
     print("Bot çalışıyor...")
