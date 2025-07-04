@@ -4,9 +4,9 @@ import sys
 import json
 import re
 from telethon import TelegramClient, events
-from telethon.tl.types import ChatBannedRights
 from telethon.tl.functions.channels import EditBannedRequest
-from config import api_id, api_hash, session_name, admin_username, admin_id
+from telethon.tl.types import ChatBannedRights
+from config import api_id, api_hash, session_name, admin_username, admin_id  # config.py içinden
 
 client = TelegramClient(session_name, api_id, api_hash)
 
@@ -14,38 +14,31 @@ afk_mode = False
 afk_reason = ""
 filtered_messages = {}
 custom_commands = {}
+owner_id = None  # Botun kurulu olduğu hesap ID'si, main içinde atanacak.
 
-# Verileri dosyadan yükle
-if os.path.exists("filtered_messages.json"):
-    with open("filtered_messages.json", "r", encoding="utf-8") as f:
-        filtered_messages = json.load(f)
-
+# Custom komutları yükle
 if os.path.exists("custom_commands.json"):
     with open("custom_commands.json", "r", encoding="utf-8") as f:
         custom_commands = json.load(f)
 
+# Filtreli mesajları yükle
+if os.path.exists("filtered_messages.json"):
+    with open("filtered_messages.json", "r", encoding="utf-8") as f:
+        filtered_messages = json.load(f)
 
-# Komut: .alive
-@client.on(events.NewMessage(pattern=r"^.alive$"))
+
+@client.on(events.NewMessage(pattern=r"^.alive$", func=lambda e: e.sender_id == owner_id))
 async def alive_handler(event):
     sender = await event.client.get_me()
     await event.edit(f"Userbotunuz çalışıyor... Seni seviyorum {sender.first_name} ❤️\n\nBot Versiyonu: v1.0")
 
 
-# Komut: .wlive (Sadece global admin)
-@client.on(events.NewMessage(pattern=r"^.wlive$"))
+@client.on(events.NewMessage(pattern=r"^.wlive$", func=lambda e: e.sender_id == admin_id))
 async def wlive_handler(event):
-    if event.sender_id != admin_id:
-        return  # Sadece admin kullanabilir
-    await event.reply(
-        "🔥 JudgeBot Aktif 🔥\n"
-        "Sorunsuz çalışıyor.\n"
-        "Bot Versiyonu: v1.0"
-    )
+    await event.reply("🔥 JudgeBot Aktif 🔥\nVersiyon: v1.0\nSorunsuz çalışıyor.")
 
 
-# Komut: .judge - Yardım metni
-@client.on(events.NewMessage(pattern=r"^.judge$"))
+@client.on(events.NewMessage(pattern=r"^.judge$", func=lambda e: e.sender_id == owner_id))
 async def judge_help(event):
     help_text = (
         "Judge Userbot Komutları v1.0:\n\n"
@@ -59,79 +52,45 @@ async def judge_help(event):
         ".restart - Botu yeniden başlatır.\n"
         ".kick <id veya reply> - Kullanıcıyı gruptan atar.\n"
         ".ban <id veya reply> - Kullanıcıyı gruptan banlar.\n"
-        ".eval <kod> - Yalnızca admin kullanabilir.\n"
+        ".eval <kod> - Yalnızca admin çalıştırabilir.\n"
         ".wlive - Global admin için sistem durumu."
     )
     await event.reply(help_text)
 
 
-# Komut: .afk <sebep>
-@client.on(events.NewMessage(pattern=r"^.afk(?: (.+))?"))
+@client.on(events.NewMessage(pattern=r"^.afk(?: (.+))?$", func=lambda e: e.sender_id == owner_id))
 async def afk_handler(event):
     global afk_mode, afk_reason
-    if afk_mode:
-        await event.reply("Zaten AFK modundasınız.")
-        return
-
     reason = event.pattern_match.group(1)
     afk_mode = True
-    afk_reason = reason if reason else "Sebep belirtilmedi."
+    afk_reason = reason if reason else "AFK modundayım."
     await event.edit(f"AFK moduna geçildi. Sebep: {afk_reason}")
 
 
-# Komut: .back
-@client.on(events.NewMessage(pattern=r"^.back$"))
+@client.on(events.NewMessage(pattern=r"^.back$", func=lambda e: e.sender_id == owner_id))
 async def back_handler(event):
     global afk_mode, afk_reason
-    if not afk_mode:
-        await event.reply("Zaten AFK modunda değilsiniz.")
-        return
-
     afk_mode = False
     afk_reason = ""
     await event.edit("Tekrar aktif oldum!")
 
 
-# AFK moddayken özelden gelen ilk mesajda cevap verir, sonra sessize alır
-afk_replied_to = set()
-
-
-@client.on(events.NewMessage(incoming=True))
+@client.on(events.NewMessage(func=lambda e: afk_mode and e.is_private and e.sender_id != owner_id))
 async def afk_auto_reply(event):
-    global afk_mode, afk_reason, afk_replied_to
-    if not afk_mode:
-        return
-    if event.is_private:
-        sender = event.sender_id
-        if sender not in afk_replied_to and sender != (await client.get_me()).id:
-            await event.reply(afk_reason)
-            afk_replied_to.add(sender)
-    elif event.is_group and event.message.mentioned:
-        sender = event.sender_id
-        if sender != (await client.get_me()).id:
-            await event.reply(afk_reason)
+    await event.reply(f"Şuan AFK modundayım. Sebep: {afk_reason}")
 
 
-# Komut: .filter <kelime> <cevap>
-@client.on(events.NewMessage(pattern=r"^.filter (\S+)", func=lambda e: e.sender_id == (await e.client.get_me()).id))
+@client.on(events.NewMessage(pattern=r"^.filter (\S+) (.+)", func=lambda e: e.sender_id == owner_id))
 async def filter_handler(event):
     keyword = event.pattern_match.group(1).lower()
-    full_text = event.raw_text
-    prefix = f".filter {keyword} "
-    if full_text.startswith(prefix):
-        response = full_text[len(prefix):].strip()
-    else:
-        await event.reply("Filtre komutu doğru formatta değil.")
-        return
-
+    response = event.pattern_match.group(2)
     filtered_messages[keyword] = response
     with open("filtered_messages.json", "w", encoding="utf-8") as f:
         json.dump(filtered_messages, f, ensure_ascii=False, indent=2)
     await event.reply(f"Filtre eklendi: {keyword} → {response}")
 
 
-# Komut: .unfilter <kelime>
-@client.on(events.NewMessage(pattern=r"^.unfilter (\S+)", func=lambda e: e.sender_id == (await e.client.get_me()).id))
+@client.on(events.NewMessage(pattern=r"^.unfilter (\S+)", func=lambda e: e.sender_id == owner_id))
 async def unfilter_handler(event):
     keyword = event.pattern_match.group(1).lower()
     if keyword in filtered_messages:
@@ -143,36 +102,26 @@ async def unfilter_handler(event):
         await event.reply("Bu kelimeye ait bir filtre bulunamadı.")
 
 
-# Filtrelere yanıt ver
-@client.on(events.NewMessage(incoming=True))
+@client.on(events.NewMessage())
 async def filter_response(event):
-    text = event.raw_text.lower()
+    text_lower = event.raw_text.lower()
     for keyword, response in filtered_messages.items():
-        if keyword in text:
+        if keyword in text_lower:
             await event.reply(response)
             break
 
 
-# Komut: .ekle <.komut> <cevap> (Kişisel komut ekle)
-@client.on(events.NewMessage(pattern=r"^.ekle (\.\S+)", func=lambda e: e.sender_id == (await e.client.get_me()).id))
+@client.on(events.NewMessage(pattern=r"^.ekle (\.\S+) (.+)", func=lambda e: e.sender_id == owner_id))
 async def add_command(event):
     cmd = event.pattern_match.group(1).strip()
-    full_text = event.raw_text
-    prefix = f".ekle {cmd} "
-    if full_text.startswith(prefix):
-        reply = full_text[len(prefix):].strip()
-    else:
-        await event.reply("Komut ve cevap doğru formatta değil.")
-        return
-
+    reply = event.pattern_match.group(2)
     custom_commands[cmd] = reply
     with open("custom_commands.json", "w", encoding="utf-8") as f:
         json.dump(custom_commands, f, ensure_ascii=False, indent=2)
     await event.reply(f"Komut eklendi: {cmd} → {reply}")
 
 
-# Komut: .sil <.komut> (Kişisel komut sil)
-@client.on(events.NewMessage(pattern=r"^.sil (\.\S+)", func=lambda e: e.sender_id == (await e.client.get_me()).id))
+@client.on(events.NewMessage(pattern=r"^.sil (\.\S+)", func=lambda e: e.sender_id == owner_id))
 async def del_command(event):
     cmd = event.pattern_match.group(1).strip()
     if cmd in custom_commands:
@@ -184,87 +133,53 @@ async def del_command(event):
         await event.reply("Böyle bir komut bulunamadı.")
 
 
-# Kişisel komutları çalıştır
-@client.on(events.NewMessage(incoming=True))
+@client.on(events.NewMessage())
 async def custom_command_handler(event):
-    text = event.raw_text.strip()
-    if text in custom_commands:
-        reply = custom_commands[text]
-        # Eğer mesaj kod bloğu olarak gönderilmek isteniyorsa,
-        # burada basitçe ``` kod bloğu içinde gönderebiliriz:
+    txt = event.raw_text.strip()
+    if txt in custom_commands:
+        # Eğer mesaj kod formatındaysa kod bloğu ile gönder
+        reply = custom_commands[txt]
         if reply.startswith("```") and reply.endswith("```"):
             await event.reply(reply)
         else:
+            # Kodu kod bloğu olarak göndermek istersen burayı değiştir
             await event.reply(reply)
 
 
-# Komut: .restart (Sadece owner)
-@client.on(events.NewMessage(pattern=r"^.restart$"))
+@client.on(events.NewMessage(pattern=r"^.restart$", func=lambda e: e.sender_id == owner_id))
 async def restart_handler(event):
-    if event.sender_id != admin_id:
-        return
     await event.reply("♻️ Bot yeniden başlatılıyor...")
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
-# Komut: .kick <id veya reply> (Sadece owner, grup içinde)
-@client.on(events.NewMessage(pattern=r"^.kick(?: (.+))?"))
+@client.on(events.NewMessage(pattern=r"^.kick(?: (.+))?", func=lambda e: e.sender_id == owner_id))
 async def kick_user(event):
-    if event.sender_id != admin_id:
-        return
-    if not event.is_group:
-        await event.reply("Bu komut sadece gruplarda çalışır.")
-        return
-
-    if event.is_reply:
-        user = await event.get_reply_message().get_sender()
-    elif event.pattern_match.group(1):
-        user = await client.get_entity(event.pattern_match.group(1))
-    else:
-        await event.reply("Kicklemek için kullanıcı belirt.")
-        return
-
-    await event.chat.kick_participant(user.id)
-    await event.reply(f"{user.first_name} gruptan atıldı.")
+    if event.is_group:
+        if event.is_reply:
+            user = await event.get_reply_message().get_sender()
+        elif event.pattern_match.group(1):
+            user = await client.get_entity(event.pattern_match.group(1))
+        else:
+            return await event.reply("Kicklemek için kullanıcı belirt.")
+        await event.chat.kick_participant(user.id)
+        await event.reply(f"{user.first_name} gruptan atıldı.")
 
 
-# Komut: .ban <id veya reply> (Sadece owner, grup içinde)
-@client.on(events.NewMessage(pattern=r"^.ban(?: (.+))?"))
+@client.on(events.NewMessage(pattern=r"^.ban(?: (.+))?", func=lambda e: e.sender_id == owner_id))
 async def ban_user(event):
-    if event.sender_id != admin_id:
-        return
-    if not event.is_group:
-        await event.reply("Bu komut sadece gruplarda çalışır.")
-        return
-
-    if event.is_reply:
-        user = await event.get_reply_message().get_sender()
-    elif event.pattern_match.group(1):
-        user = await client.get_entity(event.pattern_match.group(1))
-    else:
-        await event.reply("Banlamak için kullanıcı belirt.")
-        return
-
-    banned_rights = ChatBannedRights(
-        until_date=None,
-        view_messages=True,
-        send_messages=True,
-        send_media=True,
-        send_stickers=True,
-        send_gifs=True,
-        send_games=True,
-        send_inline=True,
-        embed_links=True,
-    )
-    await client(EditBannedRequest(event.chat_id, user.id, banned_rights))
-    await event.reply(f"{user.first_name} gruptan banlandı.")
+    if event.is_group:
+        if event.is_reply:
+            user = await event.get_reply_message().get_sender()
+        elif event.pattern_match.group(1):
+            user = await client.get_entity(event.pattern_match.group(1))
+        else:
+            return await event.reply("Banlamak için kullanıcı belirt.")
+        await client(EditBannedRequest(event.chat_id, user.id, ChatBannedRights(until_date=None, view_messages=True)))
+        await event.reply(f"{user.first_name} gruptan banlandı.")
 
 
-# Komut: .eval (Sadece admin)
-@client.on(events.NewMessage(pattern=r"^.eval (.+)"))
+@client.on(events.NewMessage(pattern=r"^.eval (.+)", func=lambda e: e.sender_id == admin_id))
 async def eval_handler(event):
-    if event.sender_id != admin_id:
-        return
     code = event.pattern_match.group(1)
     try:
         result = eval(code)
@@ -274,7 +189,11 @@ async def eval_handler(event):
 
 
 async def main():
+    global owner_id
     await client.start()
+    me = await client.get_me()
+    owner_id = me.id
+    print(f"Owner ID: {owner_id}")
     print("JudgeUserBot çalışıyor...")
     await client.run_until_disconnected()
 
