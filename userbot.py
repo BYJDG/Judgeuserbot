@@ -67,5 +67,3 @@ Başlatma
 async def main(): global me await client.start() me = await client.get_me() print("JudgeUserBot çalışıyor!") await client.run_until_disconnected()
 
 if name == 'main': asyncio.run(main())
-
-           
