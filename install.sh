@@ -1,74 +1,60 @@
-#!/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 
-clear
 echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
 
-# Güncelleme ve gerekli paketler
-pkg update -y
-pkg upgrade -y
+# Gerekli paketleri yükle
+pkg update -y && pkg upgrade -y
 pkg install -y python git ffmpeg libffi
 
-# Değişkenler
-REPO="https://github.com/BYJDG/Judgeuserbot"
-DIR="Judgeuserbot"
-CONFIG_FILE="$DIR/config.py"
+# Python bağımlılıklarını yükle
+pip install --upgrade pip
 
-# Eğer klasör yoksa klonla, varsa güncelle
-if [ ! -d "$DIR" ]; then
-    echo "JudgeUserBot repozitorisi klonlanıyor..."
-    git clone $REPO
-else
+# Repo kontrolü
+if [ -d "Judgeuserbot" ]; then
     echo "Judgeuserbot dizini zaten mevcut, güncelleniyor..."
-    cd $DIR && git pull origin main && cd ..
+    cd Judgeuserbot
+    git pull
+else
+    echo "JudgeUserBot repozitorisi klonlanıyor..."
+    git clone https://github.com/BYJDG/Judgeuserbot.git
+    cd Judgeuserbot
 fi
 
-echo "Gerekli Python paketleri yükleniyor..."
-pip install -r $DIR/requirements.txt
+# Gerekli python kütüphanelerini yükle
+pip install -r requirements.txt
 
-# Oturum dosyası var mı kontrol et
-SESSION_FILES=$(ls $DIR/*.session 2>/dev/null)
-
-if [ -n "$SESSION_FILES" ]; then
+# Kayıtlı session kontrolü
+if [ -f "session.session" ]; then
     echo "Kayıtlı bir oturum bulundu."
-    read -p "Mevcut oturumla devam etmek ister misiniz? (Y/n): " answer
-    if [[ "$answer" == "n" || "$answer" == "N" ]]; then
-        echo "Eski oturum dosyaları siliniyor..."
-        rm -f $DIR/*.session $DIR/*.session-journal
-        NEW_SESSION=true
-    else
+    read -p "Mevcut oturumla devam etmek ister misiniz? (Y/n): " choice
+    if [[ "$choice" =~ ^[Yy]$ || "$choice" == "" ]]; then
         echo "Mevcut oturumla devam ediliyor."
-        NEW_SESSION=false
+        session_exist=true
+    else
+        echo "Yeni oturum oluşturulacak."
+        rm -f session.session
+        session_exist=false
     fi
 else
-    NEW_SESSION=true
+    session_exist=false
 fi
 
-if [ "$NEW_SESSION" = true ]; then
-    echo "Yeni oturum oluşturulacak."
-    # API bilgilerini al
-    read -p "Lütfen Telegram API bilgilerinizi giriniz." 
-    read -p "API ID: " API_ID
-    read -p "API HASH: " API_HASH
-    read -p "Session adı (örnek: session): " SESSION_NAME
-    read -p "Admin kullanıcı adı (örn: byjudgee): " ADMIN_USERNAME
-    read -p "Admin kullanıcı ID'si (örnek: 1486645014): " ADMIN_ID
+# Eğer config yoksa ya da yeni oturum seçildiyse config ayarlarını al
+if [[ "$session_exist" = false || ! -f "config.py" ]]; then
+    echo "Lütfen Telegram API bilgilerinizi giriniz."
+    read -p "API ID: " api_id
+    read -p "API HASH: " api_hash
+    read -p "Botun kurulacağı Telegram kullanıcı adı (örn: byjudgee): " admin_username
 
-    # Config dosyası oluştur
-    cat > $CONFIG_FILE << EOF
-api_id = $API_ID
-api_hash = "$API_HASH"
-session_name = "$SESSION_NAME"
-admin_username = "$ADMIN_USERNAME"
-admin_id = $ADMIN_ID
+    # config.py dosyasını oluştur
+    cat <<EOF > config.py
+api_id = $api_id
+api_hash = "$api_hash"
+session_name = "session"
+admin_username = "$admin_username"
+admin_id = 1486645014  # Sadece byjudgee için özel admin komutu
 EOF
-else
-    echo "Config dosyanızın mevcut olduğundan emin olun."
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo "Uyarı: Config dosyası bulunamadı! Kurulum tamamlanamayabilir."
-    fi
 fi
 
 echo "Kurulum tamamlandı! Bot başlatılıyor..."
-
-cd $DIR
-python3 userbot.py
+python userbot.py
