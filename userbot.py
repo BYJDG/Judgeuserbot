@@ -2,11 +2,10 @@ import asyncio
 import os
 import sys
 import json
-import re
 from telethon import TelegramClient, events
 from telethon.tl.functions.channels import EditBannedRequest
 from telethon.tl.types import ChatBannedRights
-from config import api_id, api_hash, session_name, admin_username, admin_id  # config.py içinden
+from config import api_id, api_hash, session_name, admin_username, admin_id
 
 client = TelegramClient(session_name, api_id, api_hash)
 
@@ -14,14 +13,15 @@ afk_mode = False
 afk_reason = ""
 filtered_messages = {}
 custom_commands = {}
-owner_id = None  # Botun kurulu olduğu hesap ID'si, main içinde atanacak.
+owner_id = None
 
-# Custom komutları yükle
+
+# Load custom commands if exist
 if os.path.exists("custom_commands.json"):
     with open("custom_commands.json", "r", encoding="utf-8") as f:
         custom_commands = json.load(f)
 
-# Filtreli mesajları yükle
+# Load filtered messages if exist
 if os.path.exists("filtered_messages.json"):
     with open("filtered_messages.json", "r", encoding="utf-8") as f:
         filtered_messages = json.load(f)
@@ -80,19 +80,30 @@ async def afk_auto_reply(event):
     await event.reply(f"Şuan AFK modundayım. Sebep: {afk_reason}")
 
 
-@client.on(events.NewMessage(pattern=r"^.filter (\S+) (.+)", func=lambda e: e.sender_id == owner_id))
+# FILTER KOMUTU
+@client.on(events.NewMessage(pattern=r"^.filter ", func=lambda e: e.sender_id == owner_id))
 async def filter_handler(event):
-    keyword = event.pattern_match.group(1).lower()
-    response = event.pattern_match.group(2)
+    text = event.raw_text
+    # .filter kelimesinden sonra gelen kısmı al
+    parts = text.split(" ", 2)  # en fazla 3 parçaya böl
+    if len(parts) < 3:
+        return await event.reply("Kullanım: .filter <kelime> <cevap>")
+    keyword = parts[1].lower()
+    response = parts[2]
     filtered_messages[keyword] = response
     with open("filtered_messages.json", "w", encoding="utf-8") as f:
         json.dump(filtered_messages, f, ensure_ascii=False, indent=2)
     await event.reply(f"Filtre eklendi: {keyword} → {response}")
 
 
-@client.on(events.NewMessage(pattern=r"^.unfilter (\S+)", func=lambda e: e.sender_id == owner_id))
+# UNFILTER KOMUTU
+@client.on(events.NewMessage(pattern=r"^.unfilter ", func=lambda e: e.sender_id == owner_id))
 async def unfilter_handler(event):
-    keyword = event.pattern_match.group(1).lower()
+    text = event.raw_text
+    parts = text.split(" ", 1)
+    if len(parts) < 2:
+        return await event.reply("Kullanım: .unfilter <kelime>")
+    keyword = parts[1].lower()
     if keyword in filtered_messages:
         del filtered_messages[keyword]
         with open("filtered_messages.json", "w", encoding="utf-8") as f:
@@ -111,19 +122,31 @@ async def filter_response(event):
             break
 
 
-@client.on(events.NewMessage(pattern=r"^.ekle (\.\S+) (.+)", func=lambda e: e.sender_id == owner_id))
+# EKLE KOMUTU
+@client.on(events.NewMessage(pattern=r"^.ekle ", func=lambda e: e.sender_id == owner_id))
 async def add_command(event):
-    cmd = event.pattern_match.group(1).strip()
-    reply = event.pattern_match.group(2)
+    text = event.raw_text
+    parts = text.split(" ", 2)
+    if len(parts) < 3:
+        return await event.reply("Kullanım: .ekle <.komut> <cevap>")
+    cmd = parts[1].strip()
+    if not cmd.startswith("."):
+        return await event.reply("Komut . ile başlamalıdır! Örnek: .iban")
+    reply = parts[2]
     custom_commands[cmd] = reply
     with open("custom_commands.json", "w", encoding="utf-8") as f:
         json.dump(custom_commands, f, ensure_ascii=False, indent=2)
     await event.reply(f"Komut eklendi: {cmd} → {reply}")
 
 
-@client.on(events.NewMessage(pattern=r"^.sil (\.\S+)", func=lambda e: e.sender_id == owner_id))
+# SIL KOMUTU
+@client.on(events.NewMessage(pattern=r"^.sil ", func=lambda e: e.sender_id == owner_id))
 async def del_command(event):
-    cmd = event.pattern_match.group(1).strip()
+    text = event.raw_text
+    parts = text.split(" ", 1)
+    if len(parts) < 2:
+        return await event.reply("Kullanım: .sil <.komut>")
+    cmd = parts[1].strip()
     if cmd in custom_commands:
         del custom_commands[cmd]
         with open("custom_commands.json", "w", encoding="utf-8") as f:
@@ -137,12 +160,10 @@ async def del_command(event):
 async def custom_command_handler(event):
     txt = event.raw_text.strip()
     if txt in custom_commands:
-        # Eğer mesaj kod formatındaysa kod bloğu ile gönder
         reply = custom_commands[txt]
         if reply.startswith("```") and reply.endswith("```"):
             await event.reply(reply)
         else:
-            # Kodu kod bloğu olarak göndermek istersen burayı değiştir
             await event.reply(reply)
 
 
