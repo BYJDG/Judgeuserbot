@@ -2,35 +2,70 @@ import asyncio import os import json import re from telethon import TelegramClie
 
 client = TelegramClient(session_name, api_id, api_hash)
 
-is_afk = False afk_reason = None notified_users = set() custom_commands = {}
+Oturum bilgisi
 
-Komutlar dosyası
+me = None
 
-CUSTOM_COMMANDS_FILE = "custom_commands.json" if os.path.exists(CUSTOM_COMMANDS_FILE): with open(CUSTOM_COMMANDS_FILE, "r") as f: custom_commands = json.load(f)
+AFK bilgisi
 
-@client.on(events.NewMessage(pattern=r'^.alive$')) async def alive(event): if event.sender_id == (await client.get_me()).id: sender = await event.get_sender() await event.edit(f"Userbotunuz çalışıyor ve sana bir şey demek istiyor...\nSeni seviyorum {sender.first_name} ❤️\n\nBot Versiyonu: v1.0")
+afk = False afk_reason = None afk_notified_users = set()
 
-@client.on(events.NewMessage(pattern=r'^.afk(?:\s+(.*))?$')) async def set_afk(event): global is_afk, afk_reason, notified_users if event.sender_id == (await client.get_me()).id: is_afk = True afk_reason = event.pattern_match.group(1) notified_users = set() msg = afk_reason if afk_reason else "AFK modundayım." await event.edit(msg)
+Filtreler ve özel komutlar
 
-@client.on(events.NewMessage(pattern=r'^.back$')) async def back_from_afk(event): global is_afk, afk_reason, notified_users if event.sender_id == (await client.get_me()).id: is_afk = False afk_reason = None notified_users = set() await event.edit("AFK modundan çıktım.")
+filters = {} custom_commands = {}
 
-@client.on(events.NewMessage()) async def afk_auto_reply(event): global is_afk, afk_reason, notified_users if is_afk and event.sender_id != (await client.get_me()).id: if event.is_private or (event.is_group and (await event.get_sender()).mention in event.raw_text): if event.sender_id not in notified_users: notified_users.add(event.sender_id) await event.reply(afk_reason if afk_reason else "AFK modundayım.")
+.alive komutu
 
-@client.on(events.NewMessage(pattern=r'^.filter\s+(\S+)\s+(.+)$')) async def add_filter(event): if event.sender_id == (await client.get_me()).id: keyword = event.pattern_match.group(1).lower() response = event.pattern_match.group(2) custom_commands[keyword] = response with open(CUSTOM_COMMANDS_FILE, "w") as f: json.dump(custom_commands, f) await event.reply(f"Filtre eklendi: {keyword}")
+@client.on(events.NewMessage(pattern=r"^.alive$")) async def alive_handler(event): global me if event.sender_id != me.id: return await event.edit(f"Userbotunuz çalışıyor ve sana bişey demek istiyor..\nSeni seviyorum {me.first_name} ❤️\n\nBot Versiyonu: v1.0")
 
-@client.on(events.NewMessage(pattern=r'^.unfilter\s+(\S+)$')) async def remove_filter(event): if event.sender_id == (await client.get_me()).id: keyword = event.pattern_match.group(1).lower() if keyword in custom_commands: del custom_commands[keyword] with open(CUSTOM_COMMANDS_FILE, "w") as f: json.dump(custom_commands, f) await event.reply(f"Filtre kaldırıldı: {keyword}")
+.afk komutu
 
-@client.on(events.NewMessage(pattern=r'^.ekle\s+(\S+)\s+(.+)$')) async def add_custom_command(event): if event.sender_id == (await client.get_me()).id: cmd = event.pattern_match.group(1).lstrip(".") response = event.pattern_match.group(2) custom_commands[cmd] = response with open(CUSTOM_COMMANDS_FILE, "w") as f: json.dump(custom_commands, f) await event.reply(f"Komut eklendi: .{cmd}")
+@client.on(events.NewMessage(pattern=r"^.afk (.+)$")) async def afk_handler(event): global afk, afk_reason, afk_notified_users, me if event.sender_id != me.id: return afk = True afk_reason = event.pattern_match.group(1) afk_notified_users = set() await event.edit(f"AFK moduna geçtiniz: {afk_reason}")
 
-@client.on(events.NewMessage(pattern=r'^.sil\s+(\S+)$')) async def delete_custom_command(event): if event.sender_id == (await client.get_me()).id: cmd = event.pattern_match.group(1).lstrip(".") if cmd in custom_commands: del custom_commands[cmd] with open(CUSTOM_COMMANDS_FILE, "w") as f: json.dump(custom_commands, f) await event.reply(f"Komut silindi: .{cmd}") else: await event.reply("Böyle bir komut bulunamadı.")
+.back komutu
 
-@client.on(events.NewMessage(pattern=r'^.judge$')) async def list_commands(event): if event.sender_id == (await client.get_me()).id: msg = "Judge Userbot Komutları v1.0:\n\n" msg += ".alive - Botun çalışıp çalışmadığını kontrol eder.\n" msg += ".afk <sebep> - AFK moduna geçer, sebebi belirtir.\n" msg += ".back - AFK modundan çıkar.\n" msg += ".filter <kelime> <cevap> - Mesaj filtreleme.\n" msg += ".unfilter <kelime> - Filtreyi kaldır.\n" msg += ".ekle .komut <cevap> - Yeni komut ekle.\n" msg += ".sil .komut - Eklenen komutu sil.\n" msg += ".judge - Komut listesini gösterir.\n" msg += ".wlive - Global admin komutu.\n" await event.reply(msg)
+@client.on(events.NewMessage(pattern=r"^.back$")) async def back_handler(event): global afk, afk_reason, afk_notified_users, me if event.sender_id != me.id: return afk = False afk_reason = None afk_notified_users = set() await event.edit("Tekrar buradayım!")
 
-@client.on(events.NewMessage(pattern=r'^.wlive$')) async def wlive(event): if event.sender_id == int(admin_id): await event.reply("✨ JudgeUserBot aktif!\nHer şey yolunda görünüyor.\nBot Versiyon: v1.0")
+Mesajlara AFK bildirimi
 
-@client.on(events.NewMessage) async def custom_command_handler(event): if event.sender_id == (await client.get_me()).id: cmd = event.raw_text.lstrip(".") if cmd in custom_commands: await event.reply(custom_commands[cmd])
+@client.on(events.NewMessage()) async def afk_response(event): global afk, afk_reason, afk_notified_users, me if not afk: return if not event.is_private and me.id not in event.message.entities and not event.message.mentioned: return if event.sender_id in afk_notified_users: return afk_notified_users.add(event.sender_id) await event.reply(f"{afk_reason}")
 
-async def main(): await client.start() print("[JudgeUserBot] Bot başlatıldı.") await client.run_until_disconnected()
+.filter komutu
+
+@client.on(events.NewMessage(pattern=r"^.filter (.+?) (.+)$")) async def add_filter(event): if event.sender_id != me.id: return keyword = event.pattern_match.group(1).lower() response = event.pattern_match.group(2) filters[keyword] = response await event.reply(f"Filtre eklendi: '{keyword}' => '{response}'")
+
+.unfilter komutu
+
+@client.on(events.NewMessage(pattern=r"^.unfilter (.+)$")) async def remove_filter(event): if event.sender_id != me.id: return keyword = event.pattern_match.group(1).lower() if keyword in filters: del filters[keyword] await event.reply(f"Filtre kaldırıldı: '{keyword}'")
+
+Filtreleme cevap sistemi
+
+@client.on(events.NewMessage()) async def filter_response(event): if event.sender_id == me.id: return message = event.message.message.lower() for keyword, response in filters.items(): if keyword in message: await event.reply(response) break
+
+.ekle komutu
+
+@client.on(events.NewMessage(pattern=r"^.ekle \.(\w+) (.+)$")) async def add_command(event): if event.sender_id != me.id: return cmd = event.pattern_match.group(1) response = event.pattern_match.group(2) custom_commands[cmd] = response await event.reply(f"Komut eklendi: .{cmd} => {response}")
+
+.sil komutu
+
+@client.on(events.NewMessage(pattern=r"^.sil \.(\w+)$")) async def del_command(event): if event.sender_id != me.id: return cmd = event.pattern_match.group(1) if cmd in custom_commands: del custom_commands[cmd] await event.reply(f"Komut silindi: .{cmd}")
+
+Kişisel komutlara cevap
+
+@client.on(events.NewMessage()) async def custom_command_response(event): if event.sender_id == me.id: message = event.message.message if message.startswith('.'): cmd = message[1:].split(' ')[0] if cmd in custom_commands: await event.reply(custom_commands[cmd])
+
+.wlive komutu
+
+@client.on(events.NewMessage(pattern=r"^.wlive$")) async def wlive_handler(event): if event.sender_id != admin_id: return await event.reply("🚀 JudgeUserBot Aktif!\nSistem stabil çalışıyor.\nVersiyon: v1.0")
+
+.judge komutu
+
+@client.on(events.NewMessage(pattern=r"^.judge$")) async def help_handler(event): if event.sender_id != me.id: return help_text = ( "🤖 JudgeUserBot Komutları v1.0:\n\n" ".alive - Botun çalışıp çalışmadığını kontrol eder.\n" ".afk <sebep> - AFK moduna geçer, sebebi belirtir.\n" ".back - AFK modundan çıkar.\n" ".filter <kelime> <cevap> - Filtreli otomatik cevap ekler.\n" ".unfilter <kelime> - Filtreyi kaldırır.\n" ".ekle .komut <cevap> - Kişisel komut tanımlar.\n" ".sil .komut - Kişisel komutu kaldırır.\n" ".wlive - Owner komutu (sadece @byjudgee kullanabilir).\n" ) await event.reply(help_text)
+
+Başlatma
+
+async def main(): global me await client.start() me = await client.get_me() print("JudgeUserBot çalışıyor!") await client.run_until_disconnected()
 
 if name == 'main': asyncio.run(main())
 
+           
