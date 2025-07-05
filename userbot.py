@@ -10,6 +10,7 @@ from config import api_id, api_hash, session_name, admin_id
 
 client = TelegramClient(session_name, api_id, api_hash)
 
+# Global değişkenler
 afk_mode = False
 afk_reason = ""
 afk_replied_users = set()
@@ -18,6 +19,7 @@ all_filtered_messages = {}
 custom_commands = {}
 welcome_message = None
 welcome_enabled = False
+welcomed_users = set()
 
 # Özel komutları yükle
 if os.path.exists("custom_commands.json"):
@@ -58,7 +60,7 @@ async def judge_handler(event):
     )
     await event.reply(help_text)
 
-# .afk
+# .afk / .back / AFK cevap
 @client.on(events.NewMessage(pattern=r"^.afk (.+)"))
 async def afk_handler(event):
     global afk_mode, afk_reason, afk_replied_users
@@ -83,7 +85,7 @@ async def afk_auto_reply(event):
                 await event.reply(afk_reason)
                 afk_replied_users.add(event.sender_id)
 
-# .filter (PM özel)
+# .filter / .filters / .unfilter / cevap
 @client.on(events.NewMessage(pattern=r"^.filter (\S+) ([\s\S]+)"))
 async def filter_handler(event):
     if event.is_private and event.sender_id == (await client.get_me()).id:
@@ -95,8 +97,8 @@ async def filter_handler(event):
 @client.on(events.NewMessage(pattern=r"^.filters$"))
 async def filters_list_handler(event):
     if not filtered_messages:
-        return await event.reply("📭 PM filtresi yok.")
-    msg = "📥 PM Filtreleri:\n" + "\n".join(f"- {k}" for k in filtered_messages)
+        return await event.reply("📥 PM filtresi yok.")
+    msg = "📅 PM Filtreleri:\n" + "\n".join(f"- {k}" for k in filtered_messages)
     await event.reply(msg)
 
 @client.on(events.NewMessage(pattern=r"^.unfilter (.+)"))
@@ -116,7 +118,7 @@ async def filter_response(event):
                 await event.reply(response)
                 break
 
-# .allfilter (Genel)
+# .allfilter / .allfilters / .unallfilter / genel cevap
 @client.on(events.NewMessage(pattern=r"^.allfilter (\S+) ([\s\S]+)"))
 async def allfilter_handler(event):
     keyword = event.pattern_match.group(1).lower()
@@ -147,7 +149,7 @@ async def all_filter_response(event):
             await event.reply(response)
             break
 
-# .ekle
+# .ekle / .sil / özel komut çalıştır
 @client.on(events.NewMessage(pattern=r"^.ekle (\.\S+) ([\s\S]+)"))
 async def add_command(event):
     if event.sender_id == (await client.get_me()).id:
@@ -181,62 +183,25 @@ async def restart_handler(event):
     await event.reply("♻️ Bot yeniden başlatılıyor...")
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
-# .kick
-@client.on(events.NewMessage(pattern=r"^.kick(?: (.+))?"))
-async def kick_user(event):
-    if event.is_group:
-        if event.is_reply:
-            user = await event.get_reply_message().get_sender()
-        elif event.pattern_match.group(1):
-            user = await client.get_entity(event.pattern_match.group(1))
-        else:
-            return await event.reply("Kullanıcı belirt.")
-        await event.chat.kick_participant(user.id)
-        await event.reply(f"{user.first_name} atıldı.")
-
-# .ban
-@client.on(events.NewMessage(pattern=r"^.ban(?: (.+))?"))
-async def ban_user(event):
-    if event.is_group:
-        if event.is_reply:
-            user = await event.get_reply_message().get_sender()
-        elif event.pattern_match.group(1):
-            user = await client.get_entity(event.pattern_match.group(1))
-        else:
-            return await event.reply("Kullanıcı belirt.")
-        rights = ChatBannedRights(until_date=None, view_messages=True)
-        await client(EditBannedRequest(event.chat_id, user.id, rights))
-        await event.reply(f"{user.first_name} banlandı.")
-
-# .eval
-@client.on(events.NewMessage(pattern=r"^.eval (.+)"))
-async def eval_handler(event):
-    if event.sender_id != admin_id:
-        return
-    code = event.pattern_match.group(1)
-    try:
-        result = eval(code)
-        await event.reply(str(result))
-    except Exception as e:
-        await event.reply(f"Hata: {e}")
-
 # .welcome
-@client.on(events.NewMessage(pattern=r"^.welcome(?: (.+))?"))
+@client.on(events.NewMessage(pattern=r"^.welcome(?: ([\s\S]+))?"))
 async def welcome_handler(event):
-    global welcome_message, welcome_enabled
+    global welcome_message, welcome_enabled, welcomed_users
     if event.pattern_match.group(1):
         welcome_message = event.pattern_match.group(1)
-        welcome_enabled = True
         with open("welcome.json", "w") as f:
             json.dump({"message": welcome_message, "enabled": True}, f)
-        await event.reply("Karşılama mesajı ayarlandı.")
+        welcome_enabled = True
+        welcomed_users.clear()
+        await event.reply("Karşılama mesajı ayarlandı ve aktif edildi.")
     elif welcome_message:
         welcome_enabled = True
         with open("welcome.json", "w") as f:
             json.dump({"message": welcome_message, "enabled": True}, f)
-        await event.reply("Karşılama mesajı yeniden aktif.")
+        welcomed_users.clear()
+        await event.reply("Karşılama mesajı tekrar aktif edildi.")
     else:
-        await event.reply("İlk kez karşılama mesajı belirtmelisin.")
+        await event.reply("İlk önce bir karşılama mesajı belirlemelisin.")
 
 @client.on(events.NewMessage(pattern=r"^.unwelcome$"))
 async def unwelcome_handler(event):
@@ -244,25 +209,17 @@ async def unwelcome_handler(event):
     welcome_enabled = False
     with open("welcome.json", "w") as f:
         json.dump({"message": welcome_message, "enabled": False}, f)
-    await event.reply("Karşılama mesajı devre dışı.")
+    await event.reply("Karşılama mesajı devre dışı bırakıldı.")
 
-# Otomatik karşılama
 @client.on(events.NewMessage())
 async def welcome_auto(event):
     if welcome_enabled and event.is_private and event.sender_id != (await client.get_me()).id:
         sender_id = str(event.sender_id)
-        if not os.path.exists("welcomed_users.json"):
-            with open("welcomed_users.json", "w") as f:
-                json.dump([], f)
-        with open("welcomed_users.json", "r") as f:
-            welcomed = json.load(f)
-        if sender_id not in welcomed:
+        if sender_id not in welcomed_users:
             await event.reply(welcome_message)
-            welcomed.append(sender_id)
-            with open("welcomed_users.json", "w") as f:
-                json.dump(welcomed, f)
+            welcomed_users.add(sender_id)
 
-# Başlatıcı
+# Botu başlat
 async def main():
     await client.start()
     print("JudgeUserBot çalışıyor...")
@@ -270,3 +227,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+                
