@@ -1,60 +1,65 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/bin/bash
 
 echo "JudgeUserBot Kurulum Scriptine Hoşgeldiniz!"
 
-# Gerekli paketleri yükle
+# Termux mirror uyarısı (kullanıcıya hatırlatma)
+echo "No mirror or mirror group selected. İstersen 'termux-change-repo' komutuyla mirror ayarlarını yapabilirsin."
+
 pkg update -y && pkg upgrade -y
-pkg install -y python git ffmpeg libffi
+pkg install python git ffmpeg libffi -y
 
-# Python bağımlılıklarını yükle
-pip install --upgrade pip
+echo "Gerekli paketler yüklendi."
 
-# Repo kontrolü
+# Repo klonla veya güncelle
 if [ -d "Judgeuserbot" ]; then
-    echo "Judgeuserbot dizini zaten mevcut, güncelleniyor..."
+    echo "Repo zaten var, güncelleniyor..."
     cd Judgeuserbot
     git pull
+    cd ..
 else
     echo "JudgeUserBot repozitorisi klonlanıyor..."
     git clone https://github.com/BYJDG/Judgeuserbot.git
-    cd Judgeuserbot
 fi
 
-# Gerekli python kütüphanelerini yükle
+cd Judgeuserbot
+
+# Gerekli python paketlerini yükle
 pip install -r requirements.txt
 
-# Kayıtlı session kontrolü
-if [ -f "session.session" ]; then
-    echo "Kayıtlı bir oturum bulundu."
-    read -p "Mevcut oturumla devam etmek ister misiniz? (Y/n): " choice
-    if [[ "$choice" =~ ^[Yy]$ || "$choice" == "" ]]; then
-        echo "Mevcut oturumla devam ediliyor."
-        session_exist=true
-    else
-        echo "Yeni oturum oluşturulacak."
-        rm -f session.session
-        session_exist=false
-    fi
+# Config oluşturma
+echo "Lütfen Telegram API bilgilerinizi giriniz."
+read -p "API ID: " API_ID
+read -p "API HASH: " API_HASH
+read -p "Botun admin kullanıcı adını giriniz (örn: byjudgee): " ADMIN_USERNAME
+read -p "Admin kullanıcı ID'sini giriniz (örn: 1486645014): " ADMIN_ID
+
+# İstersen owners_ids gir
+read -p "Ek yetkili kullanıcı ID'leri (virgül ile ayrılmış, boş bırakabilirsin): " OWNERS_INPUT
+
+# Format owners_ids
+if [ -z "$OWNERS_INPUT" ]; then
+    OWNERS_IDS="[$ADMIN_ID]"
 else
-    session_exist=false
+    # Virgüllü listeyi python listesine çevir
+    OWNERS_IDS="[$ADMIN_ID"
+    IFS=',' read -ra ADDR <<< "$OWNERS_INPUT"
+    for i in "${ADDR[@]}"; do
+        OWNERS_IDS+=",${i// /}"
+    done
+    OWNERS_IDS+="]"
 fi
 
-# Eğer config yoksa ya da yeni oturum seçildiyse config ayarlarını al
-if [[ "$session_exist" = false || ! -f "config.py" ]]; then
-    echo "Lütfen Telegram API bilgilerinizi giriniz."
-    read -p "API ID: " api_id
-    read -p "API HASH: " api_hash
-    read -p "Botun kurulacağı Telegram kullanıcı adı (örn: byjudgee): " admin_username
+# config.py yaz
+cat > config.py << EOL
+api_id = $API_ID
+api_hash = "$API_HASH"
+session_name = "judge_session"
+admin_username = "$ADMIN_USERNAME"
+admin_id = $ADMIN_ID
+owners_ids = $OWNERS_IDS
+EOL
 
-    # config.py dosyasını oluştur
-    cat <<EOF > config.py
-api_id = $api_id
-api_hash = "$api_hash"
-session_name = "session"
-admin_username = "$admin_username"
-admin_id = 1486645014  # Sadece byjudgee için özel admin komutu
-EOF
-fi
+echo "Config dosyası oluşturuldu."
 
 echo "Kurulum tamamlandı! Bot başlatılıyor..."
-python userbot.py
+python3 userbot.py
