@@ -1,15 +1,16 @@
 import asyncio
 import os
+import sys
 import json
 import re
 from telethon import TelegramClient, events
-from telethon.tl.functions.messages import EditBannedRequest
+from telethon.tl.functions.channels import EditBannedRequest
 from telethon.tl.types import ChatBannedRights
 from config import api_id, api_hash, session_name, admin_id
 
 client = TelegramClient(session_name, api_id, api_hash)
 
-# Genel değişkenler
+# Global değişkenler
 afk_mode = False
 afk_reason = ""
 afk_replied_users = set()
@@ -17,38 +18,33 @@ filtered_messages = {}
 all_filtered_messages = {}
 custom_commands = {}
 welcome_message = None
-welcome_active = False
-my_id = None  # Botun kendi ID'si (sahibi)
+welcome_enabled = False
 
-# JSON verileri yükleme
-def load_json(file):
-    if os.path.exists(file):
-        with open(file, "r") as f:
-            return json.load(f)
-    return {}
+# Özel komutları yükle
+if os.path.exists("custom_commands.json"):
+    with open("custom_commands.json", "r") as f:
+        custom_commands = json.load(f)
 
-def save_json(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f)
+if os.path.exists("welcome.json"):
+    with open("welcome.json", "r") as f:
+        data = json.load(f)
+        welcome_message = data.get("message")
+        welcome_enabled = data.get("enabled", False)
 
-filtered_messages = load_json("filtered_messages.json")
-all_filtered_messages = load_json("all_filtered_messages.json")
-custom_commands = load_json("custom_commands.json")
-
-def is_owner(event):
-    return event.sender_id == admin_id
-
+# .alive
 @client.on(events.NewMessage(pattern=r"^.alive$"))
 async def alive_handler(event):
     sender = await event.client.get_me()
     await event.edit(f"Userbotunuz çalışıyor... Seni seviyorum {sender.first_name} ❤️\n\nBot Versiyonu: v1.0")
 
+# .wlive (sadece admin)
 @client.on(events.NewMessage(pattern=r"^.wlive$"))
 async def wlive_handler(event):
-    if not is_owner(event):
+    if event.sender_id != admin_id:
         return
     await event.reply("🔥 JudgeBot Aktif 🔥\nVersiyon: v1.0\nSorunsuz çalışıyor.")
 
+# .judge
 @client.on(events.NewMessage(pattern=r"^.judge$"))
 async def judge_help(event):
     help_text = (
@@ -56,173 +52,172 @@ async def judge_help(event):
         ".alive - Botun çalıştığını kontrol eder.\n"
         ".afk <sebep> - AFK moduna geçer.\n"
         ".back - AFK modundan çıkar.\n"
-        ".filter <kelime> <cevap> - Sadece özelde otomatik yanıt ekler.\n"
-        ".unfilter <kelime> - Özel mesaj filtresini kaldırır.\n"
-        ".allfilter <kelime> <cevap> - Her yerde geçerli filtre.\n"
-        ".unallfilter <kelime> - Her yer filtresini kaldırır.\n"
+        ".filter <kelime> <cevap> - PM'de otomatik yanıt ekler.\n"
+        ".unfilter <kelime> - PM'deki filtreyi kaldırır.\n"
+        ".allfilter <kelime> <cevap> - Tüm sohbetler için filtre ekler.\n"
+        ".unallfilter <kelime> - Genel filtreyi kaldırır.\n"
         ".ekle <.komut> <cevap> - Kişisel komut ekler.\n"
         ".sil <.komut> - Kişisel komutu siler.\n"
-        ".welcome [mesaj] - Karşılama mesajını ayarlar/aktifleştirir.\n"
-        ".unwelcome - Karşılama mesajını devre dışı bırakır.\n"
         ".restart - Botu yeniden başlatır.\n"
-        ".kick <id/reply> - Kullanıcıyı atar.\n"
-        ".ban <id/reply> - Kullanıcıyı banlar.\n"
+        ".kick <id veya reply> - Kullanıcıyı gruptan atar.\n"
+        ".ban <id veya reply> - Kullanıcıyı gruptan banlar.\n"
         ".eval <kod> - Yalnızca admin çalıştırabilir.\n"
+        ".welcome <mesaj> - Karşılama mesajı ayarla.\n"
+        ".unwelcome - Karşılama mesajını kapatır.\n"
         ".wlive - Global admin için sistem durumu."
     )
     await event.reply(help_text)
 
+# .afk
 @client.on(events.NewMessage(pattern=r"^.afk (.+)"))
 async def afk_handler(event):
     global afk_mode, afk_reason, afk_replied_users
     afk_mode = True
     afk_reason = event.pattern_match.group(1)
-    afk_replied_users.clear()
+    afk_replied_users = set()
     await event.edit(afk_reason)
 
+# .back
 @client.on(events.NewMessage(pattern=r"^.back$"))
 async def back_handler(event):
     global afk_mode, afk_reason, afk_replied_users
     afk_mode = False
     afk_reason = ""
-    afk_replied_users.clear()
+    afk_replied_users = set()
     await event.edit("Tekrar aktif oldum!")
 
+# AFK reply
 @client.on(events.NewMessage())
 async def afk_auto_reply(event):
-    global afk_mode, afk_reason, afk_replied_users
-    if afk_mode and (event.is_private or (event.mentioned or event.is_reply)):
-        if event.sender_id not in afk_replied_users:
-            await event.reply(afk_reason)
-            afk_replied_users.add(event.sender_id)
+    if afk_mode and event.sender_id != (await client.get_me()).id:
+        if event.is_private or (event.is_group and (event.mentioned or event.is_reply)):
+            if event.sender_id not in afk_replied_users:
+                await event.reply(afk_reason)
+                afk_replied_users.add(event.sender_id)
 
-@client.on(events.NewMessage(pattern=r"^.filter (\S+) (.+)"))
+# .filter (sadece PM)
+@client.on(events.NewMessage(pattern=r"^.filter (\S+) ([\s\S]+)"))
 async def filter_handler(event):
-    if not event.is_private or event.sender_id != my_id:
-        return
-    keyword = event.pattern_match.group(1).lower()
-    response = event.pattern_match.group(2)
-    filtered_messages[keyword] = response
-    save_json("filtered_messages.json", filtered_messages)
-    await event.reply(f"Özel mesaj filtresi eklendi: {keyword}")
+    if event.is_private and event.sender_id == (await client.get_me()).id:
+        keyword = event.pattern_match.group(1).lower()
+        response = event.pattern_match.group(2)
+        filtered_messages[keyword] = response
+        await event.reply(f"Filtre eklendi: {keyword} → {response}")
 
-@client.on(events.NewMessage(pattern=r"^.unfilter (\S+)"))
+# .unfilter
+@client.on(events.NewMessage(pattern=r"^.unfilter (.+)"))
 async def unfilter_handler(event):
     keyword = event.pattern_match.group(1).lower()
     if keyword in filtered_messages:
         del filtered_messages[keyword]
-        save_json("filtered_messages.json", filtered_messages)
         await event.reply(f"Filtre kaldırıldı: {keyword}")
+    else:
+        await event.reply("Bu kelimeye ait bir filtre bulunamadı.")
 
-@client.on(events.NewMessage(pattern=r"^.allfilter (\S+) (.+)"))
+# PM filter cevap
+@client.on(events.NewMessage())
+async def filter_response(event):
+    if event.is_private and event.sender_id != (await client.get_me()).id:
+        for keyword, response in filtered_messages.items():
+            if keyword.lower() in event.raw_text.lower():
+                await event.reply(response)
+                break
+
+# .allfilter
+@client.on(events.NewMessage(pattern=r"^.allfilter (\S+) ([\s\S]+)"))
 async def allfilter_handler(event):
-    if event.sender_id != my_id:
-        return
     keyword = event.pattern_match.group(1).lower()
     response = event.pattern_match.group(2)
     all_filtered_messages[keyword] = response
-    save_json("all_filtered_messages.json", all_filtered_messages)
-    await event.reply(f"Genel filtre eklendi: {keyword}")
+    await event.reply(f"Genel filtre eklendi: {keyword} → {response}")
 
-@client.on(events.NewMessage(pattern=r"^.unallfilter (\S+)"))
+# .unallfilter
+@client.on(events.NewMessage(pattern=r"^.unallfilter (.+)"))
 async def unallfilter_handler(event):
     keyword = event.pattern_match.group(1).lower()
     if keyword in all_filtered_messages:
         del all_filtered_messages[keyword]
-        save_json("all_filtered_messages.json", all_filtered_messages)
         await event.reply(f"Genel filtre kaldırıldı: {keyword}")
+    else:
+        await event.reply("Bu kelimeye ait genel filtre bulunamadı.")
 
+# Genel filter cevap
 @client.on(events.NewMessage())
-async def filter_response(event):
-    if event.sender_id == my_id:
-        return
-    text = event.raw_text.lower()
-    if event.is_private:
-        for keyword, response in filtered_messages.items():
-            if keyword in text:
-                return await event.reply(response)
+async def all_filter_response(event):
     for keyword, response in all_filtered_messages.items():
-        if keyword in text:
-            return await event.reply(response)
+        if keyword.lower() in event.raw_text.lower():
+            await event.reply(response)
+            break
 
-@client.on(events.NewMessage(pattern=r"^.ekle (\S+) (.+)", func=lambda e: e.sender_id == my_id))
+# .ekle
+@client.on(events.NewMessage(pattern=r"^.ekle (\S+) ([\s\S]+)"))
 async def add_command(event):
-    cmd = event.pattern_match.group(1).strip()
+    if event.sender_id != (await client.get_me()).id:
+        return
+    cmd = event.pattern_match.group(1)
     reply = event.pattern_match.group(2)
     custom_commands[cmd] = reply
-    save_json("custom_commands.json", custom_commands)
-    await event.reply(f"Komut eklendi: {cmd}")
+    with open("custom_commands.json", "w") as f:
+        json.dump(custom_commands, f)
+    await event.reply(f"Komut eklendi: {cmd} → {reply}")
 
-@client.on(events.NewMessage(pattern=r"^.sil (\S+)", func=lambda e: e.sender_id == my_id))
+# .sil
+@client.on(events.NewMessage(pattern=r"^.sil (\S+)"))
 async def del_command(event):
-    cmd = event.pattern_match.group(1).strip()
+    if event.sender_id != (await client.get_me()).id:
+        return
+    cmd = event.pattern_match.group(1)
     if cmd in custom_commands:
         del custom_commands[cmd]
-        save_json("custom_commands.json", custom_commands)
+        with open("custom_commands.json", "w") as f:
+            json.dump(custom_commands, f)
         await event.reply(f"Komut silindi: {cmd}")
+    else:
+        await event.reply("Böyle bir komut bulunamadı.")
 
+# Özel komutları yürüt
 @client.on(events.NewMessage())
 async def custom_command_handler(event):
     if event.raw_text.strip() in custom_commands:
         await event.reply(custom_commands[event.raw_text.strip()])
 
-@client.on(events.NewMessage(pattern=r"^.welcome(?: (.+))?"))
-async def welcome_set(event):
-    global welcome_message, welcome_active
-    if event.sender_id != my_id:
-        return
-    msg = event.pattern_match.group(1)
-    if msg:
-        welcome_message = msg
-    welcome_active = True
-    await event.reply("Karşılama mesajı aktif.")
-
-@client.on(events.NewMessage(pattern=r"^.unwelcome"))
-async def unwelcome(event):
-    global welcome_active
-    if event.sender_id != my_id:
-        return
-    welcome_active = False
-    await event.reply("Karşılama mesajı devre dışı bırakıldı.")
-
-@client.on(events.NewMessage())
-async def welcome_handler(event):
-    if welcome_active and event.is_private and event.sender_id != my_id:
-        if not hasattr(event.client, "welcomed"):
-            event.client.welcomed = set()
-        if event.sender_id not in event.client.welcomed:
-            await event.reply(welcome_message)
-            event.client.welcomed.add(event.sender_id)
-
+# .restart
 @client.on(events.NewMessage(pattern=r"^.restart$"))
 async def restart_handler(event):
     await event.reply("♻️ Bot yeniden başlatılıyor...")
-    os.execl(sys.executable, sys.executable, *sys.argv)
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
+# .kick
 @client.on(events.NewMessage(pattern=r"^.kick(?: (.+))?"))
 async def kick_user(event):
-    if not event.is_group:
-        return
-    user = await event.get_reply_message().get_sender() if event.is_reply else None
-    if not user:
-        return await event.reply("Kicklemek için kullanıcı belirt.")
-    await event.client.kick_participant(event.chat_id, user.id)
-    await event.reply(f"{user.first_name} gruptan atıldı.")
+    if event.is_group:
+        if event.is_reply:
+            user = await event.get_reply_message().get_sender()
+        elif event.pattern_match.group(1):
+            user = await client.get_entity(event.pattern_match.group(1))
+        else:
+            return await event.reply("Kicklemek için kullanıcı belirt.")
+        await event.chat.kick_participant(user.id)
+        await event.reply(f"{user.first_name} gruptan atıldı.")
 
+# .ban
 @client.on(events.NewMessage(pattern=r"^.ban(?: (.+))?"))
 async def ban_user(event):
-    if not event.is_group:
-        return
-    user = await event.get_reply_message().get_sender() if event.is_reply else None
-    if not user:
-        return await event.reply("Banlamak için kullanıcı belirt.")
-    rights = ChatBannedRights(until_date=None, view_messages=True)
-    await event.client(EditBannedRequest(event.chat_id, user.id, rights))
-    await event.reply(f"{user.first_name} gruptan banlandı.")
+    if event.is_group:
+        if event.is_reply:
+            user = await event.get_reply_message().get_sender()
+        elif event.pattern_match.group(1):
+            user = await client.get_entity(event.pattern_match.group(1))
+        else:
+            return await event.reply("Banlamak için kullanıcı belirt.")
+        rights = ChatBannedRights(until_date=None, view_messages=True)
+        await client(EditBannedRequest(event.chat_id, user.id, rights))
+        await event.reply(f"{user.first_name} gruptan banlandı.")
 
+# .eval
 @client.on(events.NewMessage(pattern=r"^.eval (.+)"))
 async def eval_handler(event):
-    if not is_owner(event):
+    if event.sender_id != admin_id:
         return
     code = event.pattern_match.group(1)
     try:
@@ -231,13 +226,54 @@ async def eval_handler(event):
     except Exception as e:
         await event.reply(f"Hata: {str(e)}")
 
+# .welcome
+@client.on(events.NewMessage(pattern=r"^.welcome(?: (.+))?"))
+async def welcome_handler(event):
+    global welcome_message, welcome_enabled
+    if event.pattern_match.group(1):
+        welcome_message = event.pattern_match.group(1)
+        with open("welcome.json", "w") as f:
+            json.dump({"message": welcome_message, "enabled": True}, f)
+        welcome_enabled = True
+        await event.reply("Karşılama mesajı ayarlandı ve aktif edildi.")
+    elif welcome_message:
+        welcome_enabled = True
+        with open("welcome.json", "w") as f:
+            json.dump({"message": welcome_message, "enabled": True}, f)
+        await event.reply("Karşılama mesajı tekrar aktif edildi.")
+    else:
+        await event.reply("İlk önce bir karşılama mesajı belirlemelisin.\nÖrn: .welcome Hoş geldin!")
+
+# .unwelcome
+@client.on(events.NewMessage(pattern=r"^.unwelcome$"))
+async def unwelcome_handler(event):
+    global welcome_enabled
+    welcome_enabled = False
+    with open("welcome.json", "w") as f:
+        json.dump({"message": welcome_message, "enabled": False}, f)
+    await event.reply("Karşılama mesajı devre dışı bırakıldı.")
+
+# Karşılama mesajı otomatik
+@client.on(events.NewMessage())
+async def welcome_auto(event):
+    if welcome_enabled and event.is_private and event.sender_id != (await client.get_me()).id:
+        if not os.path.exists("welcomed_users.json"):
+            with open("welcomed_users.json", "w") as f:
+                json.dump([], f)
+        with open("welcomed_users.json", "r") as f:
+            welcomed = json.load(f)
+        if event.sender_id not in welcomed:
+            await event.reply(welcome_message)
+            welcomed.append(event.sender_id)
+            with open("welcomed_users.json", "w") as f:
+                json.dump(welcomed, f)
+
+# Başlat
 async def main():
-    global my_id
     await client.start()
-    me = await client.get_me()
-    my_id = me.id
     print("JudgeUserBot çalışıyor...")
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
