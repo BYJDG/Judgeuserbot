@@ -1,319 +1,276 @@
-import asyncio
+
+""" UserBot başlangıç noktası """
+import importlib
+from importlib import import_module
+from sqlite3 import connect
 import os
-import sys
-import json
-import re
 import requests
-from telethon import TelegramClient, events
-from telethon.tl.functions.channels import EditBannedRequest
-from telethon.tl.types import ChatBannedRights
-from config import api_id, api_hash, session_name, admin_id
+from telethon.tl.types import InputMessagesFilterDocument
+from telethon.errors.rpcerrorlist import PhoneNumberInvalidError
+from telethon.tl.functions.channels import GetMessagesRequest
+from . import BRAIN_CHECKER, LOGS, bot, PLUGIN_CHANNEL_ID, CMD_HELP, LANGUAGE, OWEN_VERSION, PATTERNS, DEFAULT_NAME, BOT_TOKEN
+from .modules import ALL_MODULES
+from .asisstant.modules import ALL_MODULE
+import userbot.modules.sql_helper.mesaj_sql as MSJ_SQL
+import userbot.modules.sql_helper.galeri_sql as GALERI_SQL
+from pySmartDL import SmartDL
+from telethon.tl import functions
+from random import choice
+import chromedriver_autoinstaller
+from json import loads, JSONDecodeError
+import re
+import userbot.cmdhelp
+import glob
+
+ALIVE_MSG = [
+    "`Userbotunuz çalışıyor ve sana bişey demek istiyor.. Seni seviyorum` **{owensahip}** ❤️ \n Bot Versiyonu: {owen} ",
+    "🎆 `Endişelenme! Seni yanlız bırakmam.` **{owensahip}**, `OwenUserbot çalışıyor.` \n Bot Versiyonu: {owen} ",
+    "`⛈️ Elimden gelenin en iyisini yapmaya hazırım`, **{owensahip}** \n Bot Versiyonu: {owen} ",
+    "✨ `OwenUserBot sahibinin emirlerine hazır...` \n Bot Versiyonu: {owen} ",
+    "`Şuan en gelişmiş userbotun düzenlediği mesajı okuyor olmalısın` **{owensahip}**. \n Bot Versiyonu: {owen} ",
+    "`Benimi Aramıştın ❓ Ben Buradayım Merak Etme` \n Bot Versiyonu: {owen} "
+]
+
+DIZCILIK_STR = [
+    "Çıkartmayı dızlıyorum...",
+    "Çaldım Gitti Geçmiş Olsun 🤭",
+    "Yaşasın dızcılık...",
+    "Bu çıkartmayı kendi paketime davet ediyorum...",
+    "Bunu dızlamam lazım...",
+    "Hey bu güzel bir çıkartma!\nHemen dızlıyorum..",
+    "Çıkartmanı dızlıyorum\nhahaha.",
+    "Hey şuraya bak. (☉｡☉)!→\nBen bunu dızlarken...",
+    "Güller kırmızı menekşeler mavi, bu çıkartmayı paketime dızlayarak havalı olacağım...",
+    "Çıkartma hapsediliyor...",
+    "Bay dızcı bu çıkartmayı dızlıyor... ",
+    "Bu güzel çıkartma neden benim paketimde de olmasın🤭",
+]
+
+AFKSTR = [
+    "Şu an acele işim var, daha sonra mesaj atsan olmaz mı? Zaten yine geleceğim.",
+    "Aradığınız kişi şu anda telefona cevap veremiyor. Sinyal sesinden sonra kendi tarifeniz üzerinden mesajınızı bırakabilirsiniz. Mesaj ücreti 49 kuruştur. \n`biiiiiiiiiiiiiiiiiiiiiiiiiiiiip`!",
+    "Birkaç dakika içinde geleceğim. Fakat gelmezsem...\ndaha fazla bekle.",
+    "Şu an burada değilim, ama muhtemelen başka bir yerdeyim.",
+    "Güller kırmızı\nMenekşeler mavi\nBana bir mesaj bırak\nVe sana döneceğim.",
+    "Bazen hayattaki en iyi şeyler beklemeye değer…\nHemen dönerim.",
+    "Hemen dönerim,\nama eğer geri dönmezsem,\ndaha sonra dönerim.",
+    "Henüz anlamadıysan,\nburada değilim.",
+    "Merhaba, uzak mesajıma hoş geldiniz, bugün sizi nasıl görmezden gelebilirim?",
+    "7 deniz ve 7 ülkeden uzaktayım,\n7 su ve 7 kıta,\n7 dağ ve 7 tepe,\n7 ovala ve 7 höyük,\n7 havuz ve 7 göl,\n7 bahar ve 7 çayır,\n7 şehir ve 7 mahalle,\n7 blok ve 7 ev...\n\nMesajların bile bana ulaşamayacağı bir yer!",
+    "Şu anda klavyeden uzaktayım, ama ekranınızda yeterince yüksek sesle çığlık atarsanız, sizi duyabilirim.",
+    "Şu yönde ilerliyorum\n---->",
+    "Şu yönde ilerliyorum\n<----",
+    "Lütfen mesaj bırakın ve beni zaten olduğumdan daha önemli hissettirin.",
+    "Sahibim burada değil, bu yüzden bana yazmayı bırak.",
+    "Burada olsaydım,\nSana nerede olduğumu söylerdim.\n\nAma ben değilim,\ngeri döndüğümde bana sor...",
+    "Uzaklardayım!\nNe zaman dönerim bilmiyorum !\nUmarım birkaç dakika sonra!",
+    "Sahibim şuan da müsait değil. Adınızı, numarınızı ve adresinizi verirseniz ona iletibilirm ve böylelikle geri döndüğü zaman.",
+    "Üzgünüm, sahibim burada değil.\nO gelene kadar benimle konuşabilirsiniz.\nSahibim size sonra döner.",
+    "Bahse girerim bir mesaj bekliyordun!",
+    "Hayat çok kısa, yapacak çok şey var...\nOnlardan birini yapıyorum...",
+    "Şu an burada değilim....\nama öyleysem ...\n\nbu harika olmaz mıydı?",
+    "Beni hatırladığına sevindim ama şuanda klavye bana çok uzak",
+    "Belki İyiyim, Belki Kötüyüm Bilmiyorsun Ama AFK Olduğumu Görebiliyorsun"
+]
+
+KICKME_MSG = [
+    "Güle güle ben gidiyorum 👋🏻",
+    "Sessizce çıkıyorum 🥴",
+    "Haberin olmadan çıkarsam bir gün benim grupta olmadığı farkedeceksin.. O yüzden bu mesajı bırakıyorum🚪",
+    "Hemen burayı terk etmeliyim🤭"
+]
+
+CV_MSG = [
+    "**{DEFAULT_NAME}** `Fazla Bi Bilgi Ayarlamamış Ama Şunu Biliyorum Kendisi Baya Zevkli Birisi Çünkü Owen Userbot Kullanıyor.` 😁",
+    "`Üzgünüm sana vercek bir bilgim yok.`"
+]
 
 
-client = TelegramClient(session_name, api_id, api_hash)
+UNAPPROVED_MSG = ("`Hey olduğun yerde kal,!👨‍💻 Ben Owen. Endişelenme!\n\n`"
+                  "`Sahibim sana mesaj atma izni vermedi o yüzden sahibim seni onaylayana kadar bu mesajı alacaksın.. `"
+                  "`Lütfen sahibimin aktif olmasını bekleyin, o genellikle PM'leri onaylar.\n\n`"
+                  "`Bildiğim kadarıyla o kafayı yemiş insanlara PM izni vermiyor.`")
+
+DB = connect("learning-data-root.check")
+CURSOR = DB.cursor()
+CURSOR.execute("""SELECT * FROM BRAIN1""")
+ALL_ROWS = CURSOR.fetchall()
 
 
-afk_mode = False
-afk_reason = ""
-afk_replied_users = set()
 
-filtered_messages = {}
-all_filtered_messages = {}
-custom_commands = {}
+INVALID_PH = '\nHATA: Girilen telefon numarası geçersiz' \
+             '\n  Ipucu: Ülke kodunu kullanarak numaranı gir' \
+             '\n   Telefon numaranızı tekrar kontrol edin'
 
-welcome_message = None
-welcome_enabled = False
-welcomed_users = set()
+for i in ALL_ROWS:
+    BRAIN_CHECKER.append(i[0])
+connect("learning-data-root.check").close()
+BRAIN_CHECKER = BRAIN_CHECKER[0]
 
 
-# Load data from files if they exist
-if os.path.exists("custom_commands.json"):
-    with open("custom_commands.json", "r") as f:
-        custom_commands = json.load(f)
+def extractCommands(file):
+    FileRead = open(file, 'r').read()
+    
+    if '/' in file:
+        file = file.split('/')[-1]
 
-if os.path.exists("welcome.json"):
-    with open("welcome.json", "r") as f:
-        data = json.load(f)
-        welcome_message = data.get("message")
-        welcome_enabled = data.get("enabled", False)
+    Pattern = re.findall(r"@register\(.*pattern=(r|)\"(.*)\".*\)", FileRead)
+    Komutlar = []
 
-if os.path.exists("filtered.json"):
-    with open("filtered.json", "r") as f:
-        filtered_messages = json.load(f)
-
-if os.path.exists("all_filtered.json"):
-    with open("all_filtered.json", "r") as f:
-        all_filtered_messages = json.load(f)
-
-
-@client.on(events.NewMessage(pattern=r"^.alive$"))
-async def alive_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    sender = await event.client.get_me()
-    await event.edit(f"Userbotunuz çalışıyor... Seni seviyorum {sender.first_name} ❤️\n\nBot Versiyonu: v1.0")
-
-
-@client.on(events.NewMessage(pattern=r"^.wlive$"))
-async def wlive_handler(event):
-    if event.sender_id != admin_id:
-        return
-    await event.reply("🔥 JudgeBot Aktif 🔥\nVersiyon: v1.0\nSorunsuz çalışıyor.")
-
-
-@client.on(events.NewMessage(pattern=r"^.judge$"))
-async def judge_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    help_text = (
-        "Judge Userbot Komutları v1.0:\n\n"
-        ".alive\n.afk <sebep>\n.back\n"
-        ".filter <kelime> <cevap>\n.unfilter <kelime>\n.filters\n"
-        ".allfilter <kelime> <cevap>\n.unallfilter <kelime>\n.allfilters\n"
-        ".ekle <.komut> <cevap>\n.sil <.komut>\n"
-        ".restart\n.kick\n.ban\n.eval <kod>\n"
-        ".welcome <mesaj>\n.unwelcome\n"
-        ".ss <url>\n"
-        ".wlive"
-    )
-    await event.reply(help_text)
-
-
-@client.on(events.NewMessage(pattern=r"^.afk (.+)"))
-async def afk_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    global afk_mode, afk_reason, afk_replied_users
-    afk_mode = True
-    afk_reason = event.pattern_match.group(1)
-    afk_replied_users.clear()
-    await event.edit("AFK moduna geçildi.")
-
-
-@client.on(events.NewMessage(pattern=r"^.back$"))
-async def back_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    global afk_mode, afk_reason, afk_replied_users
-    afk_mode = False
-    afk_reason = ""
-    afk_replied_users.clear()
-    await event.edit("Tekrar aktif oldum!")
-
-
-@client.on(events.NewMessage())
-async def afk_auto_reply(event):
-    if afk_mode and event.sender_id != (await client.get_me()).id:
-        if event.is_private or (event.is_group and (event.mentioned or event.is_reply)):
-            if event.sender_id not in afk_replied_users:
-                await event.reply(afk_reason)
-                afk_replied_users.add(event.sender_id)
-
-
-@client.on(events.NewMessage(pattern=r"^.filter (\S+) ([\s\S]+)"))
-async def filter_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    keyword = event.pattern_match.group(1).lower()
-    response = event.pattern_match.group(2)
-    filtered_messages[keyword] = response
-    with open("filtered.json", "w") as f:
-        json.dump(filtered_messages, f)
-    await event.reply(f"Filtre eklendi: {keyword} → {response}")
-
-
-@client.on(events.NewMessage(pattern=r"^.filters$"))
-async def filters_list_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    if not filtered_messages:
-        return await event.reply("📭 PM filtresi yok.")
-    msg = "📥 PM Filtreleri:\n" + "\n".join(f"- {k}" for k in filtered_messages)
-    await event.reply(msg)
-
-
-@client.on(events.NewMessage(pattern=r"^.unfilter (.+)"))
-async def unfilter_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    keyword = event.pattern_match.group(1).lower()
-    if keyword in filtered_messages:
-        del filtered_messages[keyword]
-        with open("filtered.json", "w") as f:
-            json.dump(filtered_messages, f)
-        await event.reply(f"{keyword} filtresi kaldırıldı.")
+    if re.search(r'CmdHelp\(.*\)', FileRead):
+        pass
     else:
-        await event.reply("Böyle bir filtre yok.")
+        dosyaAdi = file.replace('.py', '')
+        CmdHelp = userbot.cmdhelp.CmdHelp(dosyaAdi, False)
 
+        # Komutları Alıyoruz #
+        for Command in Pattern:
+            Command = Command[1]
+            if Command == '' or len(Command) <= 1:
+                continue
+            Komut = re.findall("(^.*[a-zA-Z0-9şğüöçı]\w)", Command)
+            if (len(Komut) >= 1) and (not Komut[0] == ''):
+                Komut = Komut[0]
+                if Komut[0] == '^':
+                    KomutStr = Komut[1:]
+                    if KomutStr[0] == '.':
+                        KomutStr = KomutStr[1:]
+                    Komutlar.append(KomutStr)
+                else:
+                    if Command[0] == '^':
+                        KomutStr = Command[1:]
+                        if KomutStr[0] == '.':
+                            KomutStr = KomutStr[1:]
+                        else:
+                            KomutStr = Command
+                        Komutlar.append(KomutStr)
 
-@client.on(events.NewMessage())
-async def filter_response(event):
-    if event.is_private and event.sender_id != (await client.get_me()).id:
-        for keyword, response in filtered_messages.items():
-            if keyword.lower() in event.raw_text.lower():
-                await event.reply(response)
-                break
+            # OWENPY
+            Owenpy = re.search('\"\"\"OWENPY(.*)\"\"\"', FileRead, re.DOTALL)
+            if not Owenpy == None:
+                Owenpy = Owenpy.group(0)
+                for Satir in Owenpy.splitlines():
+                    if (not '"""' in Satir) and (':' in Satir):
+                        Satir = Satir.split(':')
+                        Isim = Satir[0]
+                        Deger = Satir[1][1:]
+                                
+                        if Isim == 'INFO':
+                            CmdHelp.add_info(Deger)
+                        elif Isim == 'WARN':
+                            CmdHelp.add_warning(Deger)
+                        else:
+                            CmdHelp.set_file_info(Isim, Deger)
+            for Komut in Komutlar:
+                # if re.search('\[(\w*)\]', Komut):
+                    # Komut = re.sub('(?<=\[.)[A-Za-z0-9_]*\]', '', Komut).replace('[', '')
+                CmdHelp.add_command(Komut, None, 'Bu plugin dışarıdan yüklenmiştir. Herhangi bir açıklama tanımlanmamıştır.')
+            CmdHelp.add()
 
-
-@client.on(events.NewMessage(pattern=r"^.allfilter (\S+) ([\s\S]+)"))
-async def allfilter_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    keyword = event.pattern_match.group(1).lower()
-    response = event.pattern_match.group(2)
-    all_filtered_messages[keyword] = response
-    with open("all_filtered.json", "w") as f:
-        json.dump(all_filtered_messages, f)
-    await event.reply(f"Genel filtre eklendi: {keyword}")
-
-
-@client.on(events.NewMessage(pattern=r"^.allfilters$"))
-async def allfilters_list_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    if not all_filtered_messages:
-        return await event.reply("🌐 Genel filtre yok.")
-    msg = "🌐 Genel Filtreler:\n" + "\n".join(f"- {k}" for k in all_filtered_messages)
-    await event.reply(msg)
-
-
-@client.on(events.NewMessage(pattern=r"^.unallfilter (.+)"))
-async def unallfilter_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    keyword = event.pattern_match.group(1).lower()
-    if keyword in all_filtered_messages:
-        del all_filtered_messages[keyword]
-        with open("all_filtered.json", "w") as f:
-            json.dump(all_filtered_messages, f)
-        await event.reply(f"{keyword} genel filtresi kaldırıldı.")
-    else:
-        await event.reply("Böyle bir genel filtre yok.")
-
-
-@client.on(events.NewMessage())
-async def all_filter_response(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    for keyword, response in all_filtered_messages.items():
-        if keyword.lower() in event.raw_text.lower():
-            await event.reply(response)
-            break
-
-
-@client.on(events.NewMessage(pattern=r"^.ekle (.\S+) ([\s\S]+)"))
-async def add_command(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    cmd = event.pattern_match.group(1)
-    reply = event.pattern_match.group(2)
-    custom_commands[cmd] = reply
-    with open("custom_commands.json", "w") as f:
-        json.dump(custom_commands, f)
-    await event.reply(f"Komut eklendi: {cmd}")
-
-
-@client.on(events.NewMessage(pattern=r"^.sil (.\S+)"))
-async def del_command(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    cmd = event.pattern_match.group(1)
-    if cmd in custom_commands:
-        del custom_commands[cmd]
-        with open("custom_commands.json", "w") as f:
-            json.dump(custom_commands, f)
-        await event.reply(f"{cmd} komutu silindi.")
-    else:
-        await event.reply("Böyle bir komut yok.")
-
-
-@client.on(events.NewMessage())
-async def custom_command_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    if event.raw_text.strip() in custom_commands:
-        await event.reply(custom_commands[event.raw_text.strip()])
-
-
-@client.on(events.NewMessage(pattern=r"^.restart$"))
-async def restart_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    await event.reply("♻️ Bot yeniden başlatılıyor...")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
-
-
-@client.on(events.NewMessage(pattern=r"^.welcome(?: ([\s\S]+))?"))
-async def welcome_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    global welcome_message, welcome_enabled, welcomed_users
-    if event.pattern_match.group(1):
-        welcome_message = event.pattern_match.group(1)
-        with open("welcome.json", "w") as f:
-            json.dump({"message": welcome_message, "enabled": True}, f)
-        welcome_enabled = True
-        welcomed_users.clear()
-        await event.reply("Karşılama mesajı ayarlandı ve aktif edildi.")
-    elif welcome_message:
-        welcome_enabled = True
-        with open("welcome.json", "w") as f:
-            json.dump({"message": welcome_message, "enabled": True}, f)
-        welcomed_users.clear()
-        await event.reply("Karşılama mesajı tekrar aktif edildi.")
-    else:
-        await event.reply("İlk önce bir karşılama mesajı belirlemelisin.")
-
-
-@client.on(events.NewMessage(pattern=r"^.unwelcome$"))
-async def unwelcome_handler(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    global welcome_enabled
-    welcome_enabled = False
-    with open("welcome.json", "w") as f:
-        json.dump({"message": welcome_message, "enabled": False}, f)
-    await event.reply("Karşılama mesajı devre dışı bırakıldı.")
-
-
-@client.on(events.NewMessage())
-async def welcome_auto(event):
-    if welcome_enabled and event.is_private and event.sender_id != (await client.get_me()).id:
-        sender_id = str(event.sender_id)
-        if sender_id not in welcomed_users:
-            await event.reply(welcome_message)
-            welcomed_users.add(sender_id)
-
-
-@client.on(events.NewMessage(pattern=r"^.ss (.+)"))
-async def screenshot(event):
-    if event.sender_id != (await client.get_me()).id:
-        return
-    url = event.pattern_match.group(1)
-    api_url = f"https://image.thum.io/get/width/1200/{url}"
+try:
+    bot.start()
+    idim = bot.get_me().id
+    owenbl = requests.get('https://raw.githubusercontent.com/erdewbey/datas/master/blacklist.json').json()
+    if idim in owenbl:
+        bot.send_message("me", f"`❌ Owen yöneticileri sizi bottan yasakladı! Bot kapatılıyor...`")
+        LOGS.error("Owen yöneticileri sizi bottan yasakladı! Bot kapatılıyor...")
+        bot.disconnect()
+    # ChromeDriver'ı Ayarlayalım #
     try:
-        await client.send_file(event.chat_id, api_url, caption=f"📸 Screenshot: {url}")
-    except Exception as e:
-        await event.reply(f"Ekran görüntüsü alınamadı: {str(e)}")
+        chromedriver_autoinstaller.install()
+    except:
+        pass
+    
+    # Galeri için değerler
+    GALERI = {}
+
+    # PLUGIN MESAJLARI AYARLIYORUZ
+    PLUGIN_MESAJLAR = {}
+    ORJ_PLUGIN_MESAJLAR = {"alive": f"{str(choice(ALIVE_MSG))}", "afk": f"`{str(choice(AFKSTR))}`", "kickme": f"`{str(choice(KICKME_MSG))}`", "pm": str(UNAPPROVED_MSG), "dızcı": str(choice(DIZCILIK_STR)), "cv": str(choice(CV_MSG)), "ban": "🌀 {mention}`, Banlandı!!`", "mute": "🌀 {mention}`, sessize alındı!`", "approve": "`Merhaba` {mention}`, artık bana mesaj gönderebilirsin!`", "disapprove": "{mention}`, artık bana mesaj gönderemezsin!`", "block": "{mention}`, bunu bana mecbur bıraktın! Seni engelledim!`"}
 
 
-@client.on(events.NewMessage(pattern=r"^.eval (.+)"))
-async def eval_handler(event):
-    if event.sender_id != admin_id:
-        return
-    code = event.pattern_match.group(1)
-    try:
-        result = eval(code)
-        await event.reply(str(result))
-    except Exception as e:
-        await event.reply(f"Hata: {str(e)}")
+    PLUGIN_MESAJLAR_TURLER = ["alive", "afk", "kickme", "pm", "dızcı", "cv", "ban", "mute", "approve", "disapprove", "block"]
+    for mesaj in PLUGIN_MESAJLAR_TURLER:
+        dmsj = MSJ_SQL.getir_mesaj(mesaj)
+        if dmsj == False:
+            PLUGIN_MESAJLAR[mesaj] = ORJ_PLUGIN_MESAJLAR[mesaj]
+        else:
+            if dmsj.startswith("MEDYA_"):
+                medya = int(dmsj.split("MEDYA_")[1])
+                medya = bot.get_messages(PLUGIN_CHANNEL_ID, ids=medya)
+
+                PLUGIN_MESAJLAR[mesaj] = medya
+            else:
+                PLUGIN_MESAJLAR[mesaj] = dmsj
+    if not PLUGIN_CHANNEL_ID == None:
+        LOGS.info("🔄 Pluginler Yükleniyor..")
+        try:
+            KanalId = bot.get_entity(PLUGIN_CHANNEL_ID)
+        except:
+            KanalId = "me"
+
+        for plugin in bot.iter_messages(KanalId, filter=InputMessagesFilterDocument):
+            if plugin.file.name and (len(plugin.file.name.split('.')) > 1) \
+                and plugin.file.name.split('.')[-1] == 'py':
+                Split = plugin.file.name.split('.')
+
+                if not os.path.exists("./userbot/modules/" + plugin.file.name):
+                    dosya = bot.download_media(plugin, "./userbot/modules/")
+                else:
+                    LOGS.info("Bu Plugin Onsuzda Yüklüdür " + plugin.file.name)
+                    extractCommands('./userbot/modules/' + plugin.file.name)
+                    dosya = plugin.file.name
+                    continue 
+                
+                try:
+                    spec = importlib.util.spec_from_file_location("userbot.modules." + Split[0], dosya)
+                    mod = importlib.util.module_from_spec(spec)
+
+                    spec.loader.exec_module(mod)
+                except Exception as e:
+                    LOGS.info(f"`[×] Yükleme Başarısız! Plugin Hatalı!!\n\nHata: {e}`")
+
+                    try:
+                        plugin.delete()
+                    except:
+                        pass
+
+                    if os.path.exists("./userbot/modules/" + plugin.file.name):
+                        os.remove("./userbot/modules/" + plugin.file.name)
+                    continue
+                extractCommands('./userbot/modules/' + plugin.file.name)
+    else:
+        bot.send_message("me", f"`Lütfen pluginlerin kalıcı olması için PLUGIN_CHANNEL_ID'i ayarlayın.`")
 
 
-async def main():
-    await client.start()
-    print("JudgeUserBot çalışıyor...")
-    await client.run_until_disconnected()
+   
+except PhoneNumberInvalidError:
+    print(INVALID_PH)
+    exit(1)
 
+async def FotoDegistir (foto):
+        return False
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    
+for module_name in ALL_MODULES:
+    imported_module = import_module("userbot.modules." + module_name)
+if BOT_TOKEN:
+ for module_name in ALL_MODULE:
+    imported_module = import_module("userbot.asisstant.modules." + module_name)    
+
+os.system("clear")
+
+LOGS.info("+===========================================================+")
+LOGS.info("|                     ✨Owen Userbot✨                       |")
+LOGS.info("+==============+==============+==============+==============+")
+LOGS.info("|                                                            |")
+LOGS.info("Botunuz çalışıyor! Herhangi bir sohbete .alive yazarak Test edin."
+          " Yardıma İhtiyacınız varsa, Destek grubumuza gelin t.me/OwenSupport")
+LOGS.info(f"Bot versiyonunuz: Owen ==> {OWEN_VERSION}")
+
+"""
+if len(argv) not in (1, 3, 4):
+    bot.disconnect()
+else:
+"""
+bot.run_until_disconnected()
