@@ -37,5 +37,60 @@ EOL
 
 echo "Config dosyası oluşturuldu."
 
+# === .sor Komutu Kurulumu ===
+read -p ".sor komutu aktif edilsin mi? (y/n): " ENABLE_SOR
+if [ "$ENABLE_SOR" == "y" ]; then
+    # .env dosyasını kontrol et
+    if [ ! -f ".env" ]; then
+        touch .env
+    fi
+
+    if grep -q "OPENAI_API_KEY=" .env; then
+        echo "API anahtarı zaten mevcut, atlanıyor..."
+    else
+        read -p "OpenAI API anahtarınızı girin: " API_KEY
+        echo "OPENAI_API_KEY=$API_KEY" >> .env
+        echo ".env dosyasına API anahtarı eklendi."
+    fi
+
+    # plugins klasörü yoksa oluştur
+    if [ ! -d "userbot/plugins" ]; then
+        mkdir -p userbot/plugins
+    fi
+
+    # sor.py dosyasını oluştur
+    cat > userbot/plugins/sor.py << 'EOF'
+import os
+import openai
+from telethon import events
+from config import admin_id
+from dotenv import load_dotenv
+
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+from userbot import client
+
+@client.on(events.NewMessage(pattern=r"^.sor (.+)"))
+async def gpt_sor(event):
+    if event.sender_id != (await client.get_me()).id:
+        return
+
+    try:
+        yanit = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": event.pattern_match.group(1)}],
+            max_tokens=150,
+            temperature=0.5
+        )
+        cevap = yanit.choices[0].message.content.strip()
+        await event.reply(cevap)
+    except Exception as e:
+        await event.reply(f"Hata: {str(e)}")
+EOF
+
+    echo ".sor komutu başarıyla eklendi."
+fi
+
 echo "Kurulum tamamlandı! Bot başlatılıyor..."
 python3 userbot.py
