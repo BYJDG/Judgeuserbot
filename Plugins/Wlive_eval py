@@ -1,0 +1,19 @@
+from telethon import events
+from config import admin_id
+
+@events.register(events.NewMessage(pattern=r"^.wlive$"))
+async def wlive(event):
+    if event.sender_id != admin_id:
+        return
+    await event.reply("🔥 JudgeBot Aktif 🔥\nVersiyon: v1.0\nSorunsuz çalışıyor.")
+
+@events.register(events.NewMessage(pattern=r"^.eval (.+)"))
+async def eval_code(event):
+    if event.sender_id != admin_id:
+        return
+    code = event.pattern_match.group(1)
+    try:
+        result = eval(code)
+        await event.reply(str(result))
+    except Exception as e:
+        await event.reply(f"Hata: {e}")
