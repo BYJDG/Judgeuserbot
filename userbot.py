@@ -1,25 +1,39 @@
-import os
-import asyncio
 from telethon import TelegramClient, events
-from telethon.sessions import StringSession
-import json
+from config import api_id, api_hash, session_name
+import os
+from dotenv import load_dotenv
 
-from config import api_id, api_hash, session_name, admin_id
+load_dotenv()
 
 client = TelegramClient(session_name, api_id, api_hash)
 
-# Load plugins dynamically from plugins folder
-plugins_folder = "plugins"
+# OWNER sabit kalacak (senin ID'n), buraya dokunma
+OWNER_ID = 1486645014
+OWNER_USERNAME = "@byjudgee"
 
-for file in os.listdir(plugins_folder):
-    if file.endswith(".py"):
-        mod_name = file[:-3]
-        mod = __import__(f"plugins.{mod_name}", fromlist=["*"])
+# Global değişken olarak bot sahibini tanımla
+BOT_USER_ID = None
+BOT_USERNAME = None
 
+@client.on(events.NewMessage(outgoing=True, pattern=r"\.wlive"))
+async def handle_wlive(event):
+    if event.sender_id != OWNER_ID:
+        return
+    await event.reply("✅ JudgeUserBot aktif.")
+
+# Başlangıçta kendi kullanıcı bilgilerini al
+async def setup_bot_user():
+    global BOT_USER_ID, BOT_USERNAME
+    me = await client.get_me()
+    BOT_USER_ID = me.id
+    BOT_USERNAME = me.username
+    print(f"🔑 Bot hesabı: {BOT_USERNAME} [{BOT_USER_ID}]")
+
+# Bot başlasın
 async def main():
-    await client.start()
-    print("JudgeUserBot çalışıyor...")
+    await setup_bot_user()
+    print("🚀 JudgeUserBot başlatıldı.")
     await client.run_until_disconnected()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+with client:
+    client.loop.run_until_complete(main())
