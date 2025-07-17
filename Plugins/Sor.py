@@ -1,24 +1,23 @@
-import os
-import openai
 from telethon import events
-from dotenv import load_dotenv
-from userbot import client
+from config import admin_id, openai_api_key
+import openai
 
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = openai_api_key
 
-@client.on(events.NewMessage(pattern=r"^.sor (.+)"))
-async def gpt_sor(event):
-    if event.sender_id != (await client.get_me()).id:
+@events.register(events.NewMessage(pattern=r"^.sor (.+)"))
+async def sor(event):
+    me = await event.client.get_me()
+    if event.sender_id != me.id:
         return
+
+    soru = event.pattern_match.group(1)
     try:
-        response = openai.ChatCompletion.create(
+        yanit = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": event.pattern_match.group(1)}],
+            messages=[{"role": "user", "content": soru}],
             max_tokens=100,
-            temperature=0.5
         )
-        answer = response.choices[0].message.content.strip()
-        await event.reply(answer)
+        cevap = yanit.choices[0].message.content
+        await event.reply(cevap)
     except Exception as e:
-        await event.reply(f"Hata: {str(e)}")
+        await event.reply(f"❌ Hata: {e}")
