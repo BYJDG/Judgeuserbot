@@ -1,52 +1,76 @@
 #!/bin/bash
 
-echo "JudgeUserBot Kurulumuna Hoşgeldin!"
+# JudgeUserbot Kurulum Betiği
 
-pkg update -y && pkg upgrade -y
-pkg install python git ffmpeg libffi -y
+echo "🔍 JudgeUserbot Kurulumuna Hoşgeldin"
 
-if [ -d "Judgeuserbot" ]; then
-    echo "Repo zaten klonlanmış, güncelleniyor..."
-    cd Judgeuserbot
-    git pull
-    cd ..
+# Gerekli araçlar
+echo "🔧 Gerekli paketler kuruluyor..."
+sudo apt update -y > /dev/null 2>&1
+sudo apt install -y python3 python3-pip git tmux > /dev/null 2>&1
+
+# Repo indirme
+if [ ! -d "Judgeuserbot" ]; then
+    echo "📥 Repo indiriliyor..."
+    git clone https://github.com/BYJDG/Judgeuserbot.git  > /dev/null 2>&1
 else
-    echo "JudgeUserBot klonlanıyor..."
-    git clone https://github.com/BYJDG/Judgeuserbot.git
+    echo "🔄 Repo zaten mevcut, güncelleniyor..."
+    cd Judgeuserbot && git pull > /dev/null 2>&1 && cd ..
 fi
 
 cd Judgeuserbot
 
-pip install -r requirements.txt
-
-# Session dosyası var mı kontrol et
-if [ -f "judge_session.session" ]; then
-    echo "Zaten bir session bulundu. API ID ve HASH yeniden girilmeyecek."
-else
-    echo "Telegram API bilgilerinizi giriniz."
-    read -p "API ID: " API_ID
-    read -p "API HASH: " API_HASH
-
-    cat > config.py << EOL
-api_id = $API_ID
-api_hash = "$API_HASH"
-session_name = "judge_session"
-admin_username = "byjudgee"
-admin_id = 1486645014
-EOL
-    echo "Yeni config.py oluşturuldu."
+# config.py kontrolü
+if [ ! -f "config.py" ]; then
+    touch config.py
 fi
 
-# .env dosyası kontrolü
-if [ -f ".env" ]; then
-    echo ".env dosyası zaten var. Değiştirilmeyecek."
-else
-    echo "OpenAI API anahtarını giriniz (isteğe bağlı):"
-    read -p "API_KEY (boş bırakmak için Enter): " API_KEY
+# Session dosyası kontrolü
+if [ -f "session.session" ]; then
+    echo "✅ Kayıtlı bir session dosyası bulundu. Otomatik başlatılıyor..."
+    echo "API ID ve API HASH zaten girilmiş olmalı. Onaylıyor musun? (y/n)"
+    read -r confirm
+    if [[ "$confirm" != "y" ]]; then
+        echo "❌ Kurulum iptal edildi."
+        exit 1
+    fi
 
-    echo "OPENAI_API_KEY=$API_KEY" > .env
-    echo ".env dosyası oluşturuldu."
+    echo "⚙️ config.py oluşturuluyor..."
+    echo "API_ID = 'dummy'" >> config.py
+    echo "API_HASH = 'dummy'" >> config.py
+    echo "Session dosyası bulunduğundan API bilgileri otomatik dolduruldu."
+else
+    echo "⚠️ Session dosyası bulunamadı."
+    echo "Yeni session oluşturmak ister misin? (y/n)"
+    read -r create_session
+    if [[ "$create_session" != "y" ]]; then
+        echo "❌ Kurulum iptal edildi."
+        exit 1
+    fi
+
+    echo "⚙️ Lütfen Telegram API ID ve HASH girin (session oluşturmak için)"
+    echo -n "API ID: "
+    read api_id
+    echo -n "API HASH: "
+    read api_hash
+
+    echo "⚙️ config.py oluşturuluyor..."
+    echo "API_ID = '$api_id'" > config.py
+    echo "API_HASH = '$api_hash'" >> config.py
 fi
 
-echo "Kurulum tamamlandı! Bot başlatılıyor..."
-python3 userbot.py
+# Gerekli kütüphaneler
+echo "📦 Gerekli kütüphaneler kuruluyor..."
+pip3 install -r requirements.txt > /dev/null 2>&1
+
+# Botu tmux ile başlat
+if tmux has-session -t judgebot 2>/dev/null; then
+    echo "🔄 Eski oturum kapatılıyor..."
+    tmux kill-session -t judgebot
+fi
+
+echo "🚀 Bot başlatılıyor..."
+tmux new -d -s judgebot "python3 userbot.py"
+
+echo "✅ Kurulum tamamlandı!"
+echo "Bot arka planda çalışıyor. tmux oturumuna katılmak için: tmux attach -t judgebot"
