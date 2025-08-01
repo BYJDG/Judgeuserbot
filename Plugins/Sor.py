@@ -1,10 +1,11 @@
 from telethon import events
-from config import admin_id, openai_api_key
+from config import openai_api_key
+from userbot import client  # client nesnesi burada tanımlı olmalı
 import openai
 
 openai.api_key = openai_api_key
 
-@events.register(events.NewMessage(pattern=r"^.sor (.+)"))
+@client.on(events.NewMessage(pattern=r"^.sor (.+)"))
 async def sor(event):
     me = await event.client.get_me()
     if event.sender_id != me.id:
