@@ -51,14 +51,16 @@ async def alive_handler(event):
     if event.sender_id != (await client.get_me()).id:
         return
     sender = await event.client.get_me()
-    await event.edit(f"Userbotunuz çalışıyor... Seni seviyorum {sender.first_name} ❤️\n\nBot Versiyonu: v1.0")
+    # parse_mode eklendi
+    await event.edit(f"**Userbotunuz çalışıyor...** Seni seviyorum {sender.first_name} ❤️\n\n**Bot Versiyonu:** `v1.0`", parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.wlive$"))
 async def wlive_handler(event):
     if event.sender_id != admin_id:
         return
-    await event.reply("🔥 JudgeBot Aktif 🔥\nVersiyon: v1.0\nSorunsuz çalışıyor.")
+    # parse_mode eklendi
+    await event.reply("🔥 **JudgeBot Aktif** 🔥\n**Versiyon:** `v1.0`\nSorunsuz çalışıyor.", parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.judge$"))
@@ -66,17 +68,18 @@ async def judge_handler(event):
     if event.sender_id != (await client.get_me()).id:
         return
     help_text = (
-        "Judge Userbot Komutları v1.0:\n\n"
-        ".alive\n.afk <sebep>\n.back\n"
-        ".filter <kelime> <cevap>\n.unfilter <kelime>\n.filters\n"
-        ".allfilter <kelime> <cevap>\n.unallfilter <kelime>\n.allfilters\n"
-        ".ekle <.komut> <cevap>\n.sil <.komut>\n"
-        ".restart\n.kick\n.ban\n.eval <kod>\n"
-        ".welcome <mesaj>\n.unwelcome\n"
-        ".ss <url>\n"
-        ".wlive"
+        "**Judge Userbot Komutları v1.0:**\n\n"
+        "`.alive`\n`.afk <sebep>`\n`.back`\n"
+        "`.filter <kelime> <cevap>`\n`.unfilter <kelime>`\n`.filters`\n"
+        "`.allfilter <kelime> <cevap>`\n`.unallfilter <kelime>`\n`.allfilters`\n"
+        "`.ekle <.komut> <cevap>`\n`.sil <.komut>`\n"
+        "`.restart`\n`.kick`\n`.ban`\n`.eval <kod>`\n"
+        "`.welcome <mesaj>`\n`.unwelcome`\n"
+        "`.ss <url>`\n"
+        "`.wlive`"
     )
-    await event.reply(help_text)
+    # parse_mode eklendi
+    await event.reply(help_text, parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.afk (.+)"))
@@ -106,7 +109,8 @@ async def afk_auto_reply(event):
     if afk_mode and event.sender_id != (await client.get_me()).id:
         if event.is_private or (event.is_group and (event.mentioned or event.is_reply)):
             if event.sender_id not in afk_replied_users:
-                await event.reply(afk_reason)
+                # parse_mode eklendi
+                await event.reply(afk_reason, parse_mode='md')
                 afk_replied_users.add(event.sender_id)
 
 
@@ -119,7 +123,8 @@ async def filter_handler(event):
     filtered_messages[keyword] = response
     with open("filtered.json", "w") as f:
         json.dump(filtered_messages, f)
-    await event.reply(f"Filtre eklendi: {keyword} → {response}")
+    # parse_mode eklendi
+    await event.reply(f"Filtre eklendi: `{keyword}` → `{response}`", parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.filters$"))
@@ -127,9 +132,10 @@ async def filters_list_handler(event):
     if event.sender_id != (await client.get_me()).id:
         return
     if not filtered_messages:
-        return await event.reply("📭 PM filtresi yok.")
-    msg = "📥 PM Filtreleri:\n" + "\n".join(f"- {k}" for k in filtered_messages)
-    await event.reply(msg)
+        return await event.reply("🔸 PM filtresi yok.")
+    msg = "🔹 **PM Filtreleri:**\n" + "\n".join(f"- `{k}`" for k in filtered_messages)
+    # parse_mode eklendi
+    await event.reply(msg, parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.unfilter (.+)"))
@@ -141,7 +147,8 @@ async def unfilter_handler(event):
         del filtered_messages[keyword]
         with open("filtered.json", "w") as f:
             json.dump(filtered_messages, f)
-        await event.reply(f"{keyword} filtresi kaldırıldı.")
+        # parse_mode eklendi
+        await event.reply(f"`{keyword}` filtresi kaldırıldı.", parse_mode='md')
     else:
         await event.reply("Böyle bir filtre yok.")
 
@@ -151,7 +158,8 @@ async def filter_response(event):
     if event.is_private and event.sender_id != (await client.get_me()).id:
         for keyword, response in filtered_messages.items():
             if keyword.lower() in event.raw_text.lower():
-                await event.reply(response)
+                # parse_mode eklendi
+                await event.reply(response, parse_mode='md')
                 break
 
 
@@ -164,7 +172,8 @@ async def allfilter_handler(event):
     all_filtered_messages[keyword] = response
     with open("all_filtered.json", "w") as f:
         json.dump(all_filtered_messages, f)
-    await event.reply(f"Genel filtre eklendi: {keyword}")
+    # parse_mode eklendi
+    await event.reply(f"Genel filtre eklendi: `{keyword}`", parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.allfilters$"))
@@ -172,9 +181,10 @@ async def allfilters_list_handler(event):
     if event.sender_id != (await client.get_me()).id:
         return
     if not all_filtered_messages:
-        return await event.reply("🌐 Genel filtre yok.")
-    msg = "🌐 Genel Filtreler:\n" + "\n".join(f"- {k}" for k in all_filtered_messages)
-    await event.reply(msg)
+        return await event.reply("🔸 Genel filtre yok.")
+    msg = "🔹 **Genel Filtreler:**\n" + "\n".join(f"- `{k}`" for k in all_filtered_messages)
+    # parse_mode eklendi
+    await event.reply(msg, parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.unallfilter (.+)"))
@@ -186,18 +196,21 @@ async def unallfilter_handler(event):
         del all_filtered_messages[keyword]
         with open("all_filtered.json", "w") as f:
             json.dump(all_filtered_messages, f)
-        await event.reply(f"{keyword} genel filtresi kaldırıldı.")
+        # parse_mode eklendi
+        await event.reply(f"`{keyword}` genel filtresi kaldırıldı.", parse_mode='md')
     else:
         await event.reply("Böyle bir genel filtre yok.")
 
 
 @client.on(events.NewMessage())
 async def all_filter_response(event):
+    # Bu fonksiyonun sadece sizin mesajlarınıza yanıt verdiğini unutmayın.
     if event.sender_id != (await client.get_me()).id:
         return
     for keyword, response in all_filtered_messages.items():
         if keyword.lower() in event.raw_text.lower():
-            await event.reply(response)
+            # parse_mode eklendi
+            await event.reply(response, parse_mode='md')
             break
 
 
@@ -210,7 +223,8 @@ async def add_command(event):
     custom_commands[cmd] = reply
     with open("custom_commands.json", "w") as f:
         json.dump(custom_commands, f)
-    await event.reply(f"Komut eklendi: {cmd}")
+    # parse_mode eklendi
+    await event.reply(f"Komut eklendi: `{cmd}`", parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.sil (.\S+)"))
@@ -222,7 +236,8 @@ async def del_command(event):
         del custom_commands[cmd]
         with open("custom_commands.json", "w") as f:
             json.dump(custom_commands, f)
-        await event.reply(f"{cmd} komutu silindi.")
+        # parse_mode eklendi
+        await event.reply(f"`{cmd}` komutu silindi.", parse_mode='md')
     else:
         await event.reply("Böyle bir komut yok.")
 
@@ -232,14 +247,15 @@ async def custom_command_handler(event):
     if event.sender_id != (await client.get_me()).id:
         return
     if event.raw_text.strip() in custom_commands:
-        await event.reply(custom_commands[event.raw_text.strip()])
+        # parse_mode eklendi
+        await event.reply(custom_commands[event.raw_text.strip()], parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.restart$"))
 async def restart_handler(event):
     if event.sender_id != (await client.get_me()).id:
         return
-    await event.reply("♻️ Bot yeniden başlatılıyor...")
+    await event.reply("⚙️ Bot yeniden başlatılıyor...")
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
@@ -262,7 +278,7 @@ async def welcome_handler(event):
         welcomed_users.clear()
         await event.reply("Karşılama mesajı tekrar aktif edildi.")
     else:
-        await event.reply("İlk önce bir karşılama mesajı belirlemelisin.")
+        await event.reply("İlk önce bir karşılama mesajı belirlemelisin: `.welcome <mesaj>`", parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.unwelcome$"))
@@ -281,7 +297,8 @@ async def welcome_auto(event):
     if welcome_enabled and event.is_private and event.sender_id != (await client.get_me()).id:
         sender_id = str(event.sender_id)
         if sender_id not in welcomed_users:
-            await event.reply(welcome_message)
+            # parse_mode eklendi
+            await event.reply(welcome_message, parse_mode='md')
             welcomed_users.add(sender_id)
 
 
@@ -292,9 +309,10 @@ async def screenshot(event):
     url = event.pattern_match.group(1)
     api_url = f"https://image.thum.io/get/width/1200/{url}"
     try:
-        await client.send_file(event.chat_id, api_url, caption=f"📸 Screenshot: {url}")
+        # parse_mode eklendi
+        await client.send_file(event.chat_id, api_url, caption=f"📸 **Screenshot:** `{url}`", parse_mode='md')
     except Exception as e:
-        await event.reply(f"Ekran görüntüsü alınamadı: {str(e)}")
+        await event.reply(f"Ekran görüntüsü alınamadı: `{str(e)}`", parse_mode='md')
 
 
 @client.on(events.NewMessage(pattern=r"^.eval (.+)"))
@@ -304,9 +322,11 @@ async def eval_handler(event):
     code = event.pattern_match.group(1)
     try:
         result = eval(code)
-        await event.reply(str(result))
+        # parse_mode eklendi ve çıktı kod bloğu içine alındı
+        await event.reply(f"**Sonuç:**\n```\n{result}```", parse_mode='md')
     except Exception as e:
-        await event.reply(f"Hata: {str(e)}")
+        # parse_mode eklendi ve hata kod bloğu içine alındı
+        await event.reply(f"**Hata:**\n```\n{e}```", parse_mode='md')
 
 
 async def main():
@@ -317,3 +337,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+        
